@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
-// 1. GlassCard
+// 1. GlassCard (Crisp, high-performance fintech card)
 interface GlassCardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   className?: string;
@@ -15,8 +15,8 @@ export const GlassCard: React.FC<GlassCardProps> = ({
 }) => {
   return (
     <div
-      className={`glass-card rounded-2xl p-6 transition-all duration-300 ${
-        hoverable ? 'hover:scale-[1.01] hover:shadow-lg dark:hover:shadow-emerald-950/20 hover:border-emerald-500/20' : ''
+      className={`glass-card rounded-2xl p-6 transition-all duration-150 ${
+        hoverable ? 'hover:scale-[1.005] hover:border-emerald-500/30' : ''
       } ${className}`}
       {...props}
     >
@@ -43,26 +43,28 @@ export const CustomInput: React.FC<CustomInputProps> = ({
 }) => {
   return (
     <div className="flex flex-col gap-1.5 w-full">
-      <label className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</label>
+      <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        {label}
+      </label>
       <div className="relative flex items-center">
         {prefixSymbol && (
-          <span className="absolute left-3 text-slate-400 dark:text-slate-500 font-medium">
+          <span className="absolute left-3 text-slate-400 dark:text-slate-500 font-semibold text-xs pointer-events-none">
             {prefixSymbol}
           </span>
         )}
         <input
-          className={`w-full px-4 py-2.5 rounded-xl border text-sm font-medium transition-all duration-200 outline-none
-            ${prefixSymbol ? 'pl-9' : ''} 
-            ${suffixSymbol ? 'pr-9' : ''}
+          className={`w-full px-3.5 py-2 rounded-xl border text-sm font-semibold transition-colors duration-150 outline-none
+            ${prefixSymbol ? 'pl-8' : ''} 
+            ${suffixSymbol ? 'pr-8' : ''}
             ${
               error
-                ? 'border-red-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/25 bg-red-500/5'
-                : 'border-slate-200 dark:border-slate-800/80 bg-white/50 dark:bg-slate-900/40 text-slate-800 dark:text-slate-200 focus:border-emerald-500 dark:focus:border-emerald-500/80 focus:ring-4 focus:ring-emerald-500/10'
+                ? 'border-red-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 bg-red-500/5'
+                : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15'
             } ${className}`}
           {...props}
         />
         {suffixSymbol && (
-          <span className="absolute right-3 text-slate-400 dark:text-slate-500 font-medium text-xs">
+          <span className="absolute right-3 text-slate-400 dark:text-slate-500 font-semibold text-xs pointer-events-none">
             {suffixSymbol}
           </span>
         )}
@@ -89,17 +91,17 @@ export const CustomButton: React.FC<CustomButtonProps> = ({
   ...props
 }) => {
   const baseStyle =
-    'inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none cursor-pointer';
+    'inline-flex items-center justify-center font-bold rounded-xl transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:pointer-events-none cursor-pointer';
   
   const variants = {
     primary:
-      'bg-brand-emerald text-white hover:bg-emerald-600 shadow-sm shadow-emerald-500/10 hover:shadow-emerald-500/20 focus:ring-4 focus:ring-emerald-500/20',
+      'bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm hover:shadow focus:ring-2 focus:ring-emerald-500/25',
     secondary:
-      'bg-brand-blue text-white hover:bg-blue-600 shadow-sm shadow-blue-500/10 hover:shadow-blue-500/20 focus:ring-4 focus:ring-blue-500/20',
+      'bg-slate-900 dark:bg-slate-800 text-white hover:bg-slate-800 dark:hover:bg-slate-700 shadow-sm focus:ring-2 focus:ring-slate-500/25',
     danger:
-      'bg-red-500 text-white hover:bg-red-600 shadow-sm focus:ring-4 focus:ring-red-500/20',
+      'bg-red-500 text-white hover:bg-red-600 shadow-sm focus:ring-2 focus:ring-red-500/25',
     ghost:
-      'border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 bg-white/40 dark:bg-slate-900/20 hover:bg-slate-100 dark:hover:bg-slate-900 focus:ring-4 focus:ring-slate-100 dark:focus:ring-slate-900/50',
+      'border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 focus:ring-2 focus:ring-slate-400/20',
   };
 
   const sizes = {
@@ -120,7 +122,7 @@ export const CustomButton: React.FC<CustomButtonProps> = ({
   );
 };
 
-// 4. Slider component
+// 4. Slider with synchronized manual numeric input
 interface SliderProps {
   label: string;
   value: number;
@@ -142,35 +144,133 @@ export const Slider: React.FC<SliderProps> = ({
   prefixSymbol,
   suffixSymbol,
 }) => {
+  // Local string state for the editable input — lets user type freely
+  const [inputStr, setInputStr] = useState<string>(String(value));
+  // Whether the input is currently focused (to avoid overwriting while typing)
+  const [isFocused, setIsFocused] = useState(false);
+
+  // Sync input display when external value changes (e.g., slider drag)
+  useEffect(() => {
+    if (!isFocused) {
+      setInputStr(String(value));
+    }
+  }, [value, isFocused]);
+
+  // Clamp a value to the allowed range, snapping to the nearest step
+  const clamp = useCallback(
+    (n: number): number => {
+      if (isNaN(n)) return min;
+      const snapped = Math.round(n / step) * step;
+      return Math.min(max, Math.max(min, snapped));
+    },
+    [min, max, step]
+  );
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    // Allow only digits, one optional decimal point
+    const sanitized = raw.replace(/[^0-9.]/g, '');
+    setInputStr(sanitized);
+
+    const parsed = parseFloat(sanitized);
+    if (!isNaN(parsed)) {
+      const clamped = clamp(parsed);
+      onChange(clamped);
+    }
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    const parsed = parseFloat(inputStr);
+    if (isNaN(parsed) || inputStr.trim() === '') {
+      // Reset to current valid value
+      setInputStr(String(value));
+    } else {
+      const clamped = clamp(parsed);
+      onChange(clamped);
+      setInputStr(String(clamped));
+    }
+  };
+
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    setIsFocused(true);
+    e.target.select();
+  };
+
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const n = Number(e.target.value);
+    onChange(n);
+    if (!isFocused) {
+      setInputStr(String(n));
+    }
+  };
+
+  // Format the min/max labels nicely
+  const formatLabel = (n: number) => {
+    if (n >= 10000000) return `${(n / 10000000).toFixed(n % 10000000 === 0 ? 0 : 1)}Cr`;
+    if (n >= 100000) return `${(n / 100000).toFixed(n % 100000 === 0 ? 0 : 1)}L`;
+    if (n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k`;
+    return String(n);
+  };
+
   return (
     <div className="flex flex-col gap-2 w-full">
-      <div className="flex justify-between items-center">
-        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</span>
-        <span className="text-sm font-semibold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/10">
-          {prefixSymbol}
-          {value}
-          {suffixSymbol}
+      {/* Label + Manual Input row */}
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex-shrink-0">
+          {label}
         </span>
+        {/* Manual numeric input */}
+        <div className="relative flex items-center">
+          {prefixSymbol && (
+            <span className="absolute left-2.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 pointer-events-none z-10">
+              {prefixSymbol}
+            </span>
+          )}
+          <input
+            type="text"
+            inputMode="numeric"
+            value={inputStr}
+            onChange={handleInputChange}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            aria-label={`${label} manual input`}
+            className={`
+              w-28 text-right text-sm font-bold rounded-lg py-1.5 
+              bg-white text-slate-900 border border-slate-200 
+              dark:bg-slate-900 dark:text-slate-100 dark:border-slate-800 
+              focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 
+              shadow-sm transition-colors duration-150
+              ${prefixSymbol ? 'pl-6 pr-2.5' : suffixSymbol ? 'pl-2.5 pr-7' : 'px-2.5'}
+            `}
+          />
+          {suffixSymbol && (
+            <span className="absolute right-2.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 pointer-events-none z-10">
+              {suffixSymbol}
+            </span>
+          )}
+        </div>
       </div>
+
+      {/* Range Slider */}
       <input
         type="range"
         min={min}
         max={max}
         step={step}
         value={value}
-        onChange={e => onChange(Number(e.target.value))}
-        className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg cursor-pointer appearance-none transition-colors focus:outline-none"
+        onChange={handleSliderChange}
+        aria-label={`${label} slider`}
+        className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg cursor-pointer appearance-none focus:outline-none"
       />
-      <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+
+      {/* Min / Max labels */}
+      <div className="flex justify-between text-[10px] text-slate-400 font-semibold">
         <span>
-          {prefixSymbol}
-          {min}
-          {suffixSymbol}
+          {prefixSymbol}{formatLabel(min)}{suffixSymbol}
         </span>
         <span>
-          {prefixSymbol}
-          {max}
-          {suffixSymbol}
+          {prefixSymbol}{formatLabel(max)}{suffixSymbol}
         </span>
       </div>
     </div>
@@ -187,7 +287,7 @@ export const Tooltip: React.FC<TooltipProps> = ({ content, children }) => {
   return (
     <div className="relative group inline-block">
       {children}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs p-2 bg-slate-900 text-white text-xs rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200 shadow-xl z-50">
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs p-2 bg-slate-900 text-white text-xs rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-150 shadow-xl z-50">
         {content}
         <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900"></div>
       </div>

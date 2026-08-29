@@ -3,7 +3,7 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
 import { useCalculations } from '../hooks/useCalculations';
 import { calculateLumpSum, LumpSumInputs, LumpSumResult } from '../utils/calculations';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { exportToCSV, triggerPrint } from '../utils/exporters';
 import { GlassCard, Slider, CustomButton, CustomInput } from '../components/UI';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -27,18 +27,15 @@ export const LumpSumCalculator: React.FC = () => {
   const [savingPlan, setSavingPlan] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
 
-  // Results
-  const [result, setResult] = useState<LumpSumResult | null>(null);
-
-  useEffect(() => {
+  // Synchronous, memoized calculation results (prevents extra re-renders on every input change)
+  const result: LumpSumResult = React.useMemo(() => {
     const inputs: LumpSumInputs = {
       investmentAmount,
       expectedReturn,
       durationYears,
       inflationRate,
     };
-    const res = calculateLumpSum(inputs);
-    setResult(res);
+    return calculateLumpSum(inputs);
   }, [investmentAmount, expectedReturn, durationYears, inflationRate]);
 
   const handleSave = async () => {
@@ -104,7 +101,7 @@ export const LumpSumCalculator: React.FC = () => {
               step={5000}
               value={investmentAmount}
               onChange={setInvestmentAmount}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <Slider

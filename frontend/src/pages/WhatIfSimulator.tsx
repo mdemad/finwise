@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCurrency } from '../context/CurrencyContext';
 import { calculateSip, calculateLumpSum, calculateRetirement, calculateGoal } from '../utils/calculations';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { GlassCard, Slider } from '../components/UI';
 import { Compass, HelpCircle } from 'lucide-react';
 
@@ -14,13 +14,8 @@ export const WhatIfSimulator: React.FC = () => {
   const [globalMonthly, setGlobalMonthly] = useState(10000);
   const [globalYears, setGlobalYears] = useState(15);
 
-  // States to hold projections
-  const [sipOut, setSipOut] = useState<any>(null);
-  const [lumpOut, setLumpOut] = useState<any>(null);
-  const [retOut, setRetOut] = useState<any>(null);
-  const [goalOut, setGoalOut] = useState<any>(null);
-
-  useEffect(() => {
+  // Synchronously compute all 4 models in a single memoized calculation pass
+  const { sipOut, lumpOut, retOut, goalOut } = React.useMemo(() => {
     // 1. SIP Projections
     const sip = calculateSip({
       monthlyInvestment: globalMonthly,
@@ -31,16 +26,14 @@ export const WhatIfSimulator: React.FC = () => {
       inflationRate: globalInflation,
       adjustForInflation: true,
     });
-    setSipOut(sip);
 
-    // 2. Lump Sum Projections (using global monthly as one-off for scale or say globalMonthly * 12)
+    // 2. Lump Sum Projections
     const lump = calculateLumpSum({
-      investmentAmount: globalMonthly * 10, // 10x monthly investment
+      investmentAmount: globalMonthly * 10,
       expectedReturn: globalReturn,
       durationYears: globalYears,
       inflationRate: globalInflation,
     });
-    setLumpOut(lump);
 
     // 3. Retirement Projections
     const ret = calculateRetirement({
@@ -49,11 +42,10 @@ export const WhatIfSimulator: React.FC = () => {
       currentSavings: 100000,
       monthlyInvestment: globalMonthly,
       expectedReturnBeforeRetirement: globalReturn,
-      expectedReturnAfterRetirement: globalReturn - 3,
+      expectedReturnAfterRetirement: Math.max(1, globalReturn - 3),
       inflationRate: globalInflation,
       monthlyExpensePostRetirement: globalMonthly * 3,
     });
-    setRetOut(ret);
 
     // 4. Goal Projections
     const goal = calculateGoal({
@@ -63,7 +55,8 @@ export const WhatIfSimulator: React.FC = () => {
       inflationRate: globalInflation,
       expectedReturn: globalReturn,
     });
-    setGoalOut(goal);
+
+    return { sipOut: sip, lumpOut: lump, retOut: ret, goalOut: goal };
   }, [globalInflation, globalReturn, globalMonthly, globalYears]);
 
   return (
@@ -91,7 +84,7 @@ export const WhatIfSimulator: React.FC = () => {
               step={1000}
               value={globalMonthly}
               onChange={setGlobalMonthly}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <Slider

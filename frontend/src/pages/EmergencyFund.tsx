@@ -3,7 +3,7 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
 import { useCalculations } from '../hooks/useCalculations';
 import { calculateEmergencyFund, EmergencyInputs, EmergencyResult } from '../utils/calculations';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { exportToCSV, triggerPrint } from '../utils/exporters';
 import { GlassCard, Slider, CustomButton, CustomInput } from '../components/UI';
 import { ShieldAlert, Save, ShieldCheck, HelpCircle, Printer } from 'lucide-react';
@@ -24,13 +24,10 @@ export const EmergencyFund: React.FC = () => {
   const [savingPlan, setSavingPlan] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
 
-  // Results
-  const [result, setResult] = useState<EmergencyResult | null>(null);
-
-  useEffect(() => {
+  // Synchronous memoized calculation results
+  const result: EmergencyResult = React.useMemo(() => {
     const inputs: EmergencyInputs = { monthlyExpenses, dependents, jobStability };
-    const res = calculateEmergencyFund(inputs);
-    setResult(res);
+    return calculateEmergencyFund(inputs);
   }, [monthlyExpenses, dependents, jobStability]);
 
   const handleSave = async () => {
@@ -82,7 +79,7 @@ export const EmergencyFund: React.FC = () => {
               step={1000}
               value={monthlyExpenses}
               onChange={setMonthlyExpenses}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <Slider

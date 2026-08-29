@@ -22,12 +22,6 @@ export const Dashboard: React.FC = () => {
   const { currency } = useCurrency();
   const { calculations } = useCalculations();
 
-  // Dashboard Aggregates
-  const [netWorth, setNetWorth] = useState(0);
-  const [monthlyInvest, setMonthlyInvest] = useState(0);
-  const [futureWealth, setFutureWealth] = useState(0);
-  const [inflationCorpus, setInflationCorpus] = useState(0);
-
   // Financial Tips
   const tips = [
     "Compounding is the eighth wonder of the world. He who understands it, earns it; he who doesn't, pays it.",
@@ -42,12 +36,12 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     const timer = setInterval(() => {
       setTipIndex(prev => (prev + 1) % tips.length);
-    }, 8000);
+    }, 12000);
     return () => clearInterval(timer);
   }, []);
 
-  // Compute stats based on saved calculations
-  useEffect(() => {
+  // Compute stats based on saved calculations synchronously using useMemo
+  const { netWorth, monthlyInvest, futureWealth, inflationCorpus, dashboardChartData } = React.useMemo(() => {
     let computedNetWorth = 0;
     let computedMonthly = 0;
     let computedFuture = 0;
@@ -99,23 +93,21 @@ export const Dashboard: React.FC = () => {
       }
     }
 
-    setNetWorth(computedNetWorth);
-    setMonthlyInvest(computedMonthly);
-    setFutureWealth(computedFuture);
-    setInflationCorpus(computedInflation);
-  }, [calculations]);
-
-  // General Dashboard growth chart (mock data or compilation of SIP growth)
-  const dashboardChartData = (() => {
     const sipCalc = calculations.find(c => c.calculatorType === 'sip');
-    if (sipCalc && sipCalc.outputs?.chartData) {
-      return sipCalc.outputs.chartData;
-    }
-    return [];
-  })();
+    const chartData = sipCalc && sipCalc.outputs?.chartData ? sipCalc.outputs.chartData : [];
+
+    return {
+      netWorth: computedNetWorth,
+      monthlyInvest: computedMonthly,
+      futureWealth: computedFuture,
+      inflationCorpus: computedInflation,
+      dashboardChartData: chartData,
+    };
+  }, [calculations]);
 
   const quickActions = [
     { name: 'SIP Calculator', path: '/sip', desc: 'Calculate regular systematic wealth' },
+    { name: 'Currency Depreciation', path: '/currency', desc: 'Live FX rates & historical currency analysis' },
     { name: 'Retirement Planner', path: '/retirement', desc: 'Estimate retirement corpus needs' },
     { name: 'Goal Planner', path: '/goal', desc: 'Calculate savings for custom life goals' },
     { name: 'Scenario Compare', path: '/scenario', desc: 'Compare multi-asset strategies' },

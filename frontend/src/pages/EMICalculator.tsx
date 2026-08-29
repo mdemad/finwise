@@ -3,7 +3,7 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
 import { useCalculations } from '../hooks/useCalculations';
 import { calculateEmi, EmiInputs, EmiResult } from '../utils/calculations';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { exportToCSV, triggerPrint } from '../utils/exporters';
 import { GlassCard, Slider, CustomButton, CustomInput } from '../components/UI';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
@@ -25,13 +25,10 @@ export const EMICalculator: React.FC = () => {
   const [savingPlan, setSavingPlan] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
 
-  // Results
-  const [result, setResult] = useState<EmiResult | null>(null);
-
-  useEffect(() => {
+  // Synchronous memoized calculation results
+  const result: EmiResult = React.useMemo(() => {
     const inputs: EmiInputs = { loanAmount, interestRate, durationYears };
-    const res = calculateEmi(inputs);
-    setResult(res);
+    return calculateEmi(inputs);
   }, [loanAmount, interestRate, durationYears]);
 
   const handleSave = async () => {
@@ -106,7 +103,7 @@ export const EMICalculator: React.FC = () => {
               step={10000}
               value={loanAmount}
               onChange={setLoanAmount}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <Slider

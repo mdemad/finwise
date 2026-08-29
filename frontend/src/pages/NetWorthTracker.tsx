@@ -3,7 +3,7 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
 import { useCalculations } from '../hooks/useCalculations';
 import { calculateNetWorth, AssetEntry, LiabilityEntry, NetWorthResult } from '../utils/calculations';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { GlassCard, CustomInput, CustomButton } from '../components/UI';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { LineChart, Plus, Save, TrendingUp } from 'lucide-react';
@@ -23,23 +23,20 @@ export const NetWorthTracker: React.FC = () => {
   const [crypto, setCrypto] = useState(50000);
 
   // Liabilities States
-  const [loans, setLoans] = useState(150000);
-  const [creditCards, setCreditCards] = useState(20000);
-  const [mortgage, setMortgage] = useState(1200000);
+  const [loans, setLoans] = useState(200000);
+  const [creditCards, setCreditCards] = useState(45000);
+  const [mortgage, setMortgage] = useState(1800000);
 
-  // Plan name
-  const [planName, setPlanName] = useState('My Balance Sheet');
+  // States
+  const [planName, setPlanName] = useState('My Net Worth Portfolio');
   const [savingPlan, setSavingPlan] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
 
-  // Results
-  const [result, setResult] = useState<NetWorthResult | null>(null);
-
-  useEffect(() => {
+  // Synchronous memoized calculation results
+  const result: NetWorthResult = React.useMemo(() => {
     const assets: AssetEntry = { cash, stocks, mutualFunds, gold, realEstate, crypto };
     const liabilities: LiabilityEntry = { loans, creditCards, mortgage };
-    const res = calculateNetWorth(assets, liabilities);
-    setResult(res);
+    return calculateNetWorth(assets, liabilities);
   }, [cash, stocks, mutualFunds, gold, realEstate, crypto, loans, creditCards, mortgage]);
 
   const handleSave = async () => {
@@ -54,42 +51,42 @@ export const NetWorthTracker: React.FC = () => {
     );
     setSavingPlan(false);
     if (calc) {
-      setSaveSuccess('Net worth tracking saved successfully!');
+      setSaveSuccess('Balance sheet saved successfully!');
       setTimeout(() => setSaveSuccess(''), 4000);
     }
   };
 
   return (
     <div className="space-y-8">
-      {/* Title */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight flex items-center gap-2">
             Net Worth Tracker <LineChart className="w-6 h-6 text-emerald-500" />
           </h1>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
-            Map out your assets and liabilities to calculate your absolute financial value.
+            Map your total assets vs total liabilities to get an accurate high-resolution snapshot of your net wealth.
           </p>
         </div>
       </div>
 
+      {/* Primary KPI Header */}
       {result && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <GlassCard className="text-center p-5 bg-gradient-to-b from-slate-100/50 dark:from-slate-900/30">
-            <span className="text-[10px] font-bold text-slate-400">TOTAL ASSETS</span>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <GlassCard className="text-center p-6 bg-gradient-to-b from-slate-100/50 dark:from-slate-900/30">
+            <span className="text-xs font-bold text-slate-400">TOTAL ASSETS</span>
             <p className="text-2xl font-black mt-1 text-emerald-500">
               {formatCurrency(result.totalAssets, currency)}
             </p>
           </GlassCard>
-          <GlassCard className="text-center p-5 bg-gradient-to-b from-slate-100/50 dark:from-slate-900/30">
-            <span className="text-[10px] font-bold text-slate-400">TOTAL LIABILITIES</span>
+          <GlassCard className="text-center p-6 bg-gradient-to-b from-slate-100/50 dark:from-slate-900/30">
+            <span className="text-xs font-bold text-slate-400">TOTAL LIABILITIES</span>
             <p className="text-2xl font-black mt-1 text-red-500">
               {formatCurrency(result.totalLiabilities, currency)}
             </p>
           </GlassCard>
-          <GlassCard className="text-center p-5 bg-gradient-to-b from-emerald-950/10 dark:from-emerald-950/20 border border-emerald-500/10">
-            <span className="text-[10px] font-bold text-emerald-500">NET WORTH</span>
-            <p className="text-2xl font-black mt-1 text-slate-850 dark:text-emerald-400">
+          <GlassCard className="text-center p-6 bg-gradient-to-b from-emerald-950/10 dark:from-emerald-950/20 border border-emerald-500/10">
+            <span className="text-xs font-bold text-emerald-500">TOTAL NET WORTH</span>
+            <p className="text-2xl font-black mt-1 text-slate-800 dark:text-emerald-400">
               {formatCurrency(result.netWorth, currency)}
             </p>
           </GlassCard>
@@ -110,7 +107,7 @@ export const NetWorthTracker: React.FC = () => {
               type="number"
               value={cash}
               onChange={e => setCash(Number(e.target.value))}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <CustomInput
@@ -118,7 +115,7 @@ export const NetWorthTracker: React.FC = () => {
               type="number"
               value={stocks}
               onChange={e => setStocks(Number(e.target.value))}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <CustomInput
@@ -126,7 +123,7 @@ export const NetWorthTracker: React.FC = () => {
               type="number"
               value={mutualFunds}
               onChange={e => setMutualFunds(Number(e.target.value))}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <CustomInput
@@ -134,7 +131,7 @@ export const NetWorthTracker: React.FC = () => {
               type="number"
               value={gold}
               onChange={e => setGold(Number(e.target.value))}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <CustomInput
@@ -142,7 +139,7 @@ export const NetWorthTracker: React.FC = () => {
               type="number"
               value={realEstate}
               onChange={e => setRealEstate(Number(e.target.value))}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <CustomInput
@@ -150,7 +147,7 @@ export const NetWorthTracker: React.FC = () => {
               type="number"
               value={crypto}
               onChange={e => setCrypto(Number(e.target.value))}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
           </GlassCard>
         </div>
@@ -167,7 +164,7 @@ export const NetWorthTracker: React.FC = () => {
               type="number"
               value={loans}
               onChange={e => setLoans(Number(e.target.value))}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <CustomInput
@@ -175,7 +172,7 @@ export const NetWorthTracker: React.FC = () => {
               type="number"
               value={creditCards}
               onChange={e => setCreditCards(Number(e.target.value))}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <CustomInput
@@ -183,7 +180,7 @@ export const NetWorthTracker: React.FC = () => {
               type="number"
               value={mortgage}
               onChange={e => setMortgage(Number(e.target.value))}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             {user ? (

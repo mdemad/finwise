@@ -3,11 +3,11 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
 import { useCalculations } from '../hooks/useCalculations';
 import { calculateRetirement, RetirementInputs, RetirementResult } from '../utils/calculations';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { exportToCSV, triggerPrint } from '../utils/exporters';
 import { GlassCard, Slider, CustomButton, CustomInput } from '../components/UI';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { ArrowDownToLine, Printer, Save, FolderLock, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { FolderLock, ArrowDownToLine, Printer, Save, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const RetirementPlanner: React.FC = () => {
@@ -18,23 +18,22 @@ export const RetirementPlanner: React.FC = () => {
   // Inputs
   const [currentAge, setCurrentAge] = useState(30);
   const [retirementAge, setRetirementAge] = useState(60);
-  const [currentSavings, setCurrentSavings] = useState(200000);
-  const [monthlyInvestment, setMonthlyInvestment] = useState(15000);
+  const [currentSavings, setCurrentSavings] = useState(500000);
+  const [monthlyInvestment, setMonthlyInvestment] = useState(25000);
   const [expectedReturnBefore, setExpectedReturnBefore] = useState(12);
-  const [expectedReturnAfter, setExpectedReturnAfter] = useState(8); // conservative post-retirement return
+  const [expectedReturnAfter, setExpectedReturnAfter] = useState(8);
   const [inflationRate, setInflationRate] = useState(6);
   const [monthlyExpensePost, setMonthlyExpensePost] = useState(50000);
 
-  // Save Plan states
-  const [planName, setPlanName] = useState('My Retirement Plan');
+  // States
+  const [planName, setPlanName] = useState('My Retirement Roadmap');
   const [savingPlan, setSavingPlan] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
 
-  // Result
+  // Results
   const [result, setResult] = useState<RetirementResult | null>(null);
 
   useEffect(() => {
-    // Prevent invalid ages
     if (retirementAge <= currentAge) {
       setResult(null);
       return;
@@ -51,7 +50,16 @@ export const RetirementPlanner: React.FC = () => {
     };
     const res = calculateRetirement(inputs);
     setResult(res);
-  }, [currentAge, retirementAge, currentSavings, monthlyInvestment, expectedReturnBefore, expectedReturnAfter, inflationRate, monthlyExpensePost]);
+  }, [
+    currentAge,
+    retirementAge,
+    currentSavings,
+    monthlyInvestment,
+    expectedReturnBefore,
+    expectedReturnAfter,
+    inflationRate,
+    monthlyExpensePost,
+  ]);
 
   const handleSave = async () => {
     if (!user) return;
@@ -60,12 +68,21 @@ export const RetirementPlanner: React.FC = () => {
     const calc = await saveCalculation(
       'retirement',
       planName,
-      { currentAge, retirementAge, currentSavings, monthlyInvestment, expectedReturnBefore, expectedReturnAfter, inflationRate, monthlyExpensePost },
+      {
+        currentAge,
+        retirementAge,
+        currentSavings,
+        monthlyInvestment,
+        expectedReturnBefore,
+        expectedReturnAfter,
+        inflationRate,
+        monthlyExpensePost,
+      },
       result
     );
     setSavingPlan(false);
     if (calc) {
-      setSaveSuccess('Calculation saved successfully!');
+      setSaveSuccess('Retirement blueprint saved!');
       setTimeout(() => setSaveSuccess(''), 4000);
     }
   };
@@ -74,9 +91,10 @@ export const RetirementPlanner: React.FC = () => {
     if (!result) return;
     const exportData = result.chartData.map(pt => ({
       Age: pt.year,
-      'Projected Value': pt.futureValue,
+      'Total Invested': pt.totalInvested,
+      'Corpus Value': pt.futureValue,
     }));
-    exportToCSV(exportData, `${planName.replace(/\s+/g, '_')}_report`);
+    exportToCSV(exportData, `${planName.replace(/\s+/g, '_')}_plan`);
   };
 
   return (
@@ -87,13 +105,13 @@ export const RetirementPlanner: React.FC = () => {
             Retirement Planner <FolderLock className="w-6 h-6 text-emerald-500" />
           </h1>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
-            Map out your wealth accumulation and decumulation trajectory post-retirement.
+            Simulate wealth accumulation and post-retirement decumulation with customizable drawdown modeling.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <CustomButton variant="ghost" size="sm" onClick={handleExportCSV} className="gap-1.5 text-xs font-semibold">
-            <ArrowDownToLine className="w-4 h-4" /> CSV Report
+            <ArrowDownToLine className="w-4 h-4" /> CSV Plan
           </CustomButton>
           <CustomButton variant="ghost" size="sm" onClick={triggerPrint} className="gap-1.5 text-xs font-semibold">
             <Printer className="w-4 h-4" /> Print PDF
@@ -102,27 +120,27 @@ export const RetirementPlanner: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Side: Inputs */}
+        {/* Left Inputs */}
         <div className="lg:col-span-1 space-y-6">
           <GlassCard className="border border-slate-200/50 dark:border-slate-800/40 space-y-6">
-            <h2 className="text-lg font-bold">Retirement Details</h2>
+            <h2 className="text-lg font-bold">Timeline & Assets</h2>
 
             <div className="grid grid-cols-2 gap-4">
-              <CustomInput
+              <Slider
                 label="Current Age"
-                type="number"
+                min={18}
+                max={70}
                 value={currentAge}
-                onChange={e => setCurrentAge(Number(e.target.value))}
-                min={18}
-                max={100}
+                onChange={setCurrentAge}
+                suffixSymbol=" yrs"
               />
-              <CustomInput
-                label="Retirement Age"
-                type="number"
+              <Slider
+                label="Retire Age"
+                min={19}
+                max={85}
                 value={retirementAge}
-                onChange={e => setRetirementAge(Number(e.target.value))}
-                min={18}
-                max={100}
+                onChange={setRetirementAge}
+                suffixSymbol=" yrs"
               />
             </div>
             {retirementAge <= currentAge && (
@@ -134,11 +152,11 @@ export const RetirementPlanner: React.FC = () => {
             <Slider
               label="Current Savings"
               min={0}
-              max={10000000}
-              step={10000}
+              max={20000000}
+              step={50000}
               value={currentSavings}
               onChange={setCurrentSavings}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <Slider
@@ -148,33 +166,37 @@ export const RetirementPlanner: React.FC = () => {
               step={1000}
               value={monthlyInvestment}
               onChange={setMonthlyInvestment}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <Slider
-              label="Monthly Expenses Needed (Post-Ret.)"
+              label="Monthly Expense Post-Retire"
               min={5000}
               max={1000000}
               step={5000}
               value={monthlyExpensePost}
               onChange={setMonthlyExpensePost}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <div className="grid grid-cols-2 gap-4 border-t border-slate-200/30 dark:border-slate-800/30 pt-4">
-              <CustomInput
-                label="Pre-Ret Return %"
-                type="number"
+              <Slider
+                label="Pre-Ret Return"
+                min={1}
+                max={25}
+                step={0.5}
                 value={expectedReturnBefore}
-                onChange={e => setExpectedReturnBefore(Number(e.target.value))}
-                step={0.5}
+                onChange={setExpectedReturnBefore}
+                suffixSymbol="%"
               />
-              <CustomInput
-                label="Post-Ret Return %"
-                type="number"
-                value={expectedReturnAfter}
-                onChange={e => setExpectedReturnAfter(Number(e.target.value))}
+              <Slider
+                label="Post-Ret Return"
+                min={1}
+                max={20}
                 step={0.5}
+                value={expectedReturnAfter}
+                onChange={setExpectedReturnAfter}
+                suffixSymbol="%"
               />
             </div>
 

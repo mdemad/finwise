@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCurrency } from '../context/CurrencyContext';
 import { calculateSip, calculateLumpSum, calculateRetirement } from '../utils/calculations';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { GlassCard, Slider, CustomButton } from '../components/UI';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { GitCompare, Award, TrendingUp, HelpCircle } from 'lucide-react';
@@ -29,11 +29,10 @@ export const ScenarioComparison: React.FC = () => {
   const [retA_invest, setRetA_invest] = useState(15000);
   const [retB_age, setRetB_age] = useState(55);
   const [retB_invest, setRetB_invest] = useState(25000);
+  const [ret_currentAge] = useState(30);
 
-  // Computed results
-  const [comparison, setComparison] = useState<any>(null);
-
-  useEffect(() => {
+  // Computed results synchronously via useMemo
+  const comparison = React.useMemo(() => {
     if (activeTab === 'sip') {
       const resA = calculateSip({
         monthlyInvestment: sipA_monthly,
@@ -65,7 +64,7 @@ export const ScenarioComparison: React.FC = () => {
         valueB: resB.chartData[i]?.futureValue || 0,
       }));
 
-      setComparison({
+      return {
         valueA: resA.finalCorpus,
         investedA: resA.totalInvested,
         valueB: resB.finalCorpus,
@@ -73,7 +72,7 @@ export const ScenarioComparison: React.FC = () => {
         winner,
         difference,
         chartData,
-      });
+      };
     } else if (activeTab === 'lump') {
       const resA = calculateLumpSum({
         investmentAmount: lumpA_amt,
@@ -98,7 +97,7 @@ export const ScenarioComparison: React.FC = () => {
         valueB: resB.chartData[i]?.futureValue || 0,
       }));
 
-      setComparison({
+      return {
         valueA: resA.futureValue,
         investedA: lumpA_amt,
         valueB: resB.futureValue,
@@ -106,7 +105,7 @@ export const ScenarioComparison: React.FC = () => {
         winner,
         difference,
         chartData,
-      });
+      };
     } else if (activeTab === 'retirement') {
       const resA = calculateRetirement({
         currentAge: 30,
@@ -145,7 +144,7 @@ export const ScenarioComparison: React.FC = () => {
         });
       }
 
-      setComparison({
+      return {
         valueA: resA.retirementCorpus,
         investedA: 100000 + (retA_age - 30) * retA_invest * 12,
         valueB: resB.retirementCorpus,
@@ -153,8 +152,9 @@ export const ScenarioComparison: React.FC = () => {
         winner,
         difference,
         chartData,
-      });
+      };
     }
+    return null;
   }, [
     activeTab,
     sipA_monthly,
@@ -237,7 +237,7 @@ export const ScenarioComparison: React.FC = () => {
                   step={1000}
                   value={sipA_monthly}
                   onChange={setSipA_monthly}
-                  prefixSymbol={currency === 'INR' ? '₹' : '$'}
+                  prefixSymbol={getCurrencySymbol(currency)}
                 />
                 <Slider
                   label="Expected Return Rate"
@@ -260,7 +260,7 @@ export const ScenarioComparison: React.FC = () => {
                   step={5000}
                   value={lumpA_amt}
                   onChange={setLumpA_amt}
-                  prefixSymbol={currency === 'INR' ? '₹' : '$'}
+                  prefixSymbol={getCurrencySymbol(currency)}
                 />
                 <Slider
                   label="Expected Return Rate"
@@ -291,7 +291,7 @@ export const ScenarioComparison: React.FC = () => {
                   step={1000}
                   value={retA_invest}
                   onChange={setRetA_invest}
-                  prefixSymbol={currency === 'INR' ? '₹' : '$'}
+                  prefixSymbol={getCurrencySymbol(currency)}
                 />
               </>
             )}
@@ -313,7 +313,7 @@ export const ScenarioComparison: React.FC = () => {
                   step={1000}
                   value={sipB_monthly}
                   onChange={setSipB_monthly}
-                  prefixSymbol={currency === 'INR' ? '₹' : '$'}
+                  prefixSymbol={getCurrencySymbol(currency)}
                 />
                 <Slider
                   label="Expected Return Rate"
@@ -336,7 +336,7 @@ export const ScenarioComparison: React.FC = () => {
                   step={5000}
                   value={lumpB_amt}
                   onChange={setLumpB_amt}
-                  prefixSymbol={currency === 'INR' ? '₹' : '$'}
+                  prefixSymbol={getCurrencySymbol(currency)}
                 />
                 <Slider
                   label="Expected Return Rate"
@@ -367,7 +367,7 @@ export const ScenarioComparison: React.FC = () => {
                   step={1000}
                   value={retB_invest}
                   onChange={setRetB_invest}
-                  prefixSymbol={currency === 'INR' ? '₹' : '$'}
+                  prefixSymbol={getCurrencySymbol(currency)}
                 />
               </>
             )}

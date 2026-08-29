@@ -3,7 +3,7 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
 import { useCalculations } from '../hooks/useCalculations';
 import { calculateSip, SipInputs, SipResult } from '../utils/calculations';
-import { formatCurrency, formatPercent } from '../utils/formatters';
+import { formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { exportToCSV, triggerPrint } from '../utils/exporters';
 import { GlassCard, Slider, CustomButton, CustomInput } from '../components/UI';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -29,10 +29,8 @@ export const SIPCalculator: React.FC = () => {
   const [savingPlan, setSavingPlan] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
 
-  // Calculations Results
-  const [result, setResult] = useState<SipResult | null>(null);
-
-  useEffect(() => {
+  // Synchronous, memoized calculation results (prevents extra re-renders on every input change)
+  const result: SipResult = React.useMemo(() => {
     const inputs: SipInputs = {
       monthlyInvestment,
       expectedReturn,
@@ -42,8 +40,7 @@ export const SIPCalculator: React.FC = () => {
       inflationRate,
       adjustForInflation,
     };
-    const res = calculateSip(inputs);
-    setResult(res);
+    return calculateSip(inputs);
   }, [monthlyInvestment, expectedReturn, durationYears, stepUpPercent, stepUpFrequency, inflationRate, adjustForInflation]);
 
   const handleSave = async () => {
@@ -114,7 +111,7 @@ export const SIPCalculator: React.FC = () => {
               step={1000}
               value={monthlyInvestment}
               onChange={setMonthlyInvestment}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <Slider

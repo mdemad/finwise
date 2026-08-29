@@ -11,100 +11,319 @@
   --color-blue-dark: #1d4ed8;
 }
 
+/* ─────────────────────────────────────────
+   CSS Custom Properties (Theme Design Tokens)
+───────────────────────────────────────── */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+  --bg-app: #F6F9FD;
+  --bg-sidebar: #EDF4FC;
+  --bg-header: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-input: #FFFFFF;
+  --bg-subtle: #F1F6FD;
+  --border-color: #D6E4F2;
+  --border-subtle: #E2EDF8;
+  --text-primary: #0D1B36;
+  --text-secondary: #4A6382;
+  --text-muted: #7890AC;
+  --accent-green: #10B981;
+  --accent-green-hover: #059669;
+  --card-shadow: 0 1px 3px rgba(13, 27, 54, 0.04), 0 4px 12px rgba(13, 27, 54, 0.02);
 }
 
+.dark {
+  color-scheme: dark;
+  --bg-app: #080E1C;
+  --bg-sidebar: #0C152B;
+  --bg-header: #0C152B;
+  --bg-card: #111D38;
+  --bg-input: #0A1124;
+  --bg-subtle: #152242;
+  --border-color: #1E2D4E;
+  --border-subtle: #182542;
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --accent-green: #10B981;
+  --accent-green-hover: #34D399;
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* ─────────────────────────────────────────
+   Root & Body
+───────────────────────────────────────── */
 body {
   margin: 0;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f8fafc; /* slate-50 */
-  color: #0f172a; /* slate-900 */
-  transition: background-color 0.3s ease, color 0.3s ease;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
 }
 
-.dark body {
-  background-color: #020617; /* slate-950 */
-  color: #f8fafc; /* slate-50 */
-}
-
-/* Custom Scrollbar */
+/* ─────────────────────────────────────────
+   Fast, Crisp Custom Scrollbar
+───────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #C4D7EC;
   border-radius: 9999px;
 }
 .dark ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #253556;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #9BBADC;
 }
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #3B4F78;
 }
 
-/* Glassmorphism Styles */
-.glass-panel {
-  background-color: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
+/* ─────────────────────────────────────────
+   Theme Surface Classes
+───────────────────────────────────────── */
+.app-bg {
+  background-color: var(--bg-app);
 }
 
-.dark .glass-panel {
-  background-color: rgba(15, 23, 42, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(51, 65, 85, 0.4);
+.app-sidebar {
+  background-color: var(--bg-sidebar);
+  border-color: var(--border-color);
 }
 
+.app-header {
+  background-color: var(--bg-header);
+  border-color: var(--border-color);
+}
+
+/* Crisp, Solid High-Performance Cards */
 .glass-card {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.02);
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--card-shadow);
 }
 
-.dark .glass-card {
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.2);
+.glass-panel {
+  background-color: var(--bg-header);
+  border-color: var(--border-color);
 }
 
-/* Grid & Utilities */
-.grid-cols-autofit {
-  grid-template-cols: repeat(auto-fit, minmax(280px, 1fr));
+/* Navigation active & hover styles */
+.nav-link-base {
+  color: var(--text-secondary);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-/* Input Styles */
+.nav-link-base:hover {
+  background-color: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+:not(.dark) .nav-link-active {
+  background-color: #FFFFFF;
+  color: #047857;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(13, 27, 54, 0.08);
+  border: 1px solid #D6E4F2;
+}
+
+.dark .nav-link-active {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34D399;
+  font-weight: 700;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* ─────────────────────────────────────────
+   Inputs, Selects & Sliders
+───────────────────────────────────────── */
+input:not([type="range"]):not([type="checkbox"]),
+select,
+textarea {
+  background-color: var(--bg-input);
+  border-color: var(--border-color);
+  color: var(--text-primary) !important;
+}
+
+:not(.dark) input:not([type="range"]):not([type="checkbox"]),
+:not(.dark) select,
+:not(.dark) textarea {
+  background-color: #FFFFFF !important;
+  color: #0D1B36 !important;
+  border-color: #D6E4F2;
+}
+
+.dark input:not([type="range"]):not([type="checkbox"]),
+.dark select,
+.dark textarea {
+  background-color: #0A1124 !important;
+  color: #F8FAFC !important;
+  border-color: #1E2D4E;
+}
+
+input:not([type="range"]):not([type="checkbox"]):focus,
+select:focus {
+  border-color: var(--accent-green) !important;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
 input[type="range"] {
-  accent-color: #10b981;
+  accent-color: var(--accent-green);
 }
 
-/* Smooth Transition for Layout */
+/* Slider Manual Numeric Input with guaranteed high contrast */
+.slider-number-input {
+  background-color: #FFFFFF !important;
+  color: #0D1B36 !important;
+  border: 1px solid #D6E4F2 !important;
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(13, 27, 54, 0.04);
+}
+
+.slider-number-input:focus {
+  border-color: #10B981 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+}
+
+.dark .slider-number-input {
+  background-color: #0A1124 !important;
+  color: #F8FAFC !important;
+  border: 1px solid #1E2D4E !important;
+}
+
+.dark .slider-number-input:focus {
+  border-color: #10B981 !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+}
+
+.slider-input-prefix,
+.slider-input-suffix {
+  color: #059669;
+  font-weight: 700;
+}
+
+.dark .slider-input-prefix,
+.dark .slider-input-suffix {
+  color: #34D399;
+  font-weight: 700;
+}
+
+/* Sidebar & Header Login Button */
+.sidebar-login-btn {
+  background-color: #FFFFFF !important;
+  color: #0D1B36 !important;
+  border: 1px solid #D6E4F2 !important;
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(13, 27, 54, 0.04);
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.sidebar-login-btn:hover {
+  background-color: #EDF4FC !important;
+  border-color: #10B981 !important;
+  color: #047857 !important;
+}
+
+.dark .sidebar-login-btn {
+  background-color: #111D38 !important;
+  color: #F8FAFC !important;
+  border: 1px solid #1E2D4E !important;
+  box-shadow: none;
+}
+
+.dark .sidebar-login-btn:hover {
+  background-color: #18264A !important;
+  border-color: #34D399 !important;
+  color: #34D399 !important;
+}
+
+/* ─────────────────────────────────────────
+   Text Color Utilities Override for Consistency
+───────────────────────────────────────── */
+:not(.dark) .text-slate-900,
+:not(.dark) .text-slate-800,
+:not(.dark) .text-slate-700 {
+  color: #0D1B36;
+}
+
+:not(.dark) .text-slate-600,
+:not(.dark) .text-slate-500 {
+  color: #4A6382;
+}
+
+:not(.dark) .text-slate-400 {
+  color: #7890AC;
+}
+
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700 {
+  color: #F8FAFC;
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400 {
+  color: #94A3B8;
+}
+
+/* ─────────────────────────────────────────
+   Light/Dark Surface Tweaks
+───────────────────────────────────────── */
+:not(.dark) .bg-slate-50,
+:not(.dark) .bg-slate-100 {
+  background-color: #F6F9FD;
+}
+
+.dark .bg-slate-50,
+.dark .bg-slate-100,
+.dark .bg-slate-900,
+.dark .bg-slate-950 {
+  background-color: #080E1C;
+}
+
+.dark .border-slate-800,
+.dark .border-slate-800\/40,
+.dark .border-slate-800\/30,
+.dark .border-slate-800\/80 {
+  border-color: #1E2D4E;
+}
+
+:not(.dark) .border-slate-200,
+:not(.dark) .border-slate-200\/50,
+:not(.dark) .border-slate-200\/30 {
+  border-color: #D6E4F2;
+}
+
+/* ─────────────────────────────────────────
+   Instant, Zero-Lag Page Animation
+───────────────────────────────────────── */
 .page-transition {
-  animation: fadeIn 0.4s ease-out;
+  animation: fastFadeIn 0.15s ease-out;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+@keyframes fastFadeIn {
+  from { opacity: 0.85; }
+  to { opacity: 1; }
+}
+
+/* ─────────────────────────────────────────
+   Print Styles
+───────────────────────────────────────── */
+@media print {
+  aside, header { display: none !important; }
+  main { padding: 0 !important; }
+  .glass-card, .glass-panel {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
   }
 }

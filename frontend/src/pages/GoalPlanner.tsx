@@ -3,7 +3,7 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
 import { useCalculations } from '../hooks/useCalculations';
 import { calculateGoal, GoalInputs, GoalResult } from '../utils/calculations';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { exportToCSV, triggerPrint } from '../utils/exporters';
 import { GlassCard, Slider, CustomButton, CustomInput } from '../components/UI';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -27,10 +27,8 @@ export const GoalPlanner: React.FC = () => {
   const [savingPlan, setSavingPlan] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
 
-  // Result
-  const [result, setResult] = useState<GoalResult | null>(null);
-
-  useEffect(() => {
+  // Synchronous memoized calculation result
+  const result: GoalResult = React.useMemo(() => {
     const inputs: GoalInputs = {
       goalName,
       currentCost,
@@ -38,8 +36,7 @@ export const GoalPlanner: React.FC = () => {
       inflationRate,
       expectedReturn,
     };
-    const res = calculateGoal(inputs);
-    setResult(res);
+    return calculateGoal(inputs);
   }, [goalName, currentCost, yearsRemaining, inflationRate, expectedReturn]);
 
   const handleSave = async () => {
@@ -115,7 +112,7 @@ export const GoalPlanner: React.FC = () => {
               step={10000}
               value={currentCost}
               onChange={setCurrentCost}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <Slider

@@ -3,7 +3,7 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
 import { useCalculations } from '../hooks/useCalculations';
 import { calculateInflation, InflationInputs, InflationResult } from '../utils/calculations';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { exportToCSV, triggerPrint } from '../utils/exporters';
 import { GlassCard, Slider, CustomButton, CustomInput } from '../components/UI';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -23,12 +23,10 @@ export const InflationCalculator: React.FC = () => {
   const [savingPlan, setSavingPlan] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
 
-  const [result, setResult] = useState<InflationResult | null>(null);
-
-  useEffect(() => {
+  // Synchronous memoized calculation results
+  const result: InflationResult = React.useMemo(() => {
     const inputs: InflationInputs = { currentCost, inflationRate, years };
-    const res = calculateInflation(inputs);
-    setResult(res);
+    return calculateInflation(inputs);
   }, [currentCost, inflationRate, years]);
 
   const handleSave = async () => {
@@ -93,7 +91,7 @@ export const InflationCalculator: React.FC = () => {
               step={5000}
               value={currentCost}
               onChange={setCurrentCost}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <Slider

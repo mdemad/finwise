@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
     
+    # Currency API key (currencyapi.com primary provider)
+    # Get a free key at: https://currencyapi.com
+    # Add this as CURRENCY_API_KEY environment variable in backend/.env or on Render.
+    CURRENCY_API_KEY: str = os.getenv("CURRENCY_API_KEY", os.getenv("EXCHANGE_RATE_API_KEY", ""))
+    EXCHANGE_RATE_API_KEY: str = os.getenv("EXCHANGE_RATE_API_KEY", "")
+    
     # CORS
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
 
@@ -21,3 +27,4 @@ class Settings(BaseSettings):
         case_sensitive = True
 
 settings = Settings()
+

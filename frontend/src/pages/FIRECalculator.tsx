@@ -3,11 +3,11 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
 import { useCalculations } from '../hooks/useCalculations';
 import { calculateFire, FireInputs, FireResult } from '../utils/calculations';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getCurrencySymbol } from '../utils/formatters';
 import { exportToCSV, triggerPrint } from '../utils/exporters';
 import { GlassCard, Slider, CustomButton, CustomInput } from '../components/UI';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { ArrowDownToLine, Printer, Save, Flame } from 'lucide-react';
+import { Flame, ArrowDownToLine, Printer, Save, Sparkles, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const FIRECalculator: React.FC = () => {
@@ -16,21 +16,19 @@ export const FIRECalculator: React.FC = () => {
   const { saveCalculation } = useCalculations();
 
   // Inputs
-  const [monthlyExpenses, setMonthlyExpenses] = useState(40000);
-  const [currentSavings, setCurrentSavings] = useState(500000);
+  const [monthlyExpenses, setMonthlyExpenses] = useState(50000);
+  const [currentSavings, setCurrentSavings] = useState(1000000);
   const [currentAge, setCurrentAge] = useState(30);
   const [expectedReturn, setExpectedReturn] = useState(12);
   const [inflationRate, setInflationRate] = useState(6);
 
-  // Saved States
-  const [planName, setPlanName] = useState('My FIRE Plan');
+  // States
+  const [planName, setPlanName] = useState('My FIRE Number Plan');
   const [savingPlan, setSavingPlan] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
 
-  // Results
-  const [result, setResult] = useState<FireResult | null>(null);
-
-  useEffect(() => {
+  // Synchronous memoized calculation results
+  const result: FireResult = React.useMemo(() => {
     const inputs: FireInputs = {
       monthlyExpenses,
       currentSavings,
@@ -38,8 +36,7 @@ export const FIRECalculator: React.FC = () => {
       expectedReturn,
       inflationRate,
     };
-    const res = calculateFire(inputs);
-    setResult(res);
+    return calculateFire(inputs);
   }, [monthlyExpenses, currentSavings, currentAge, expectedReturn, inflationRate]);
 
   const handleSave = async () => {
@@ -54,7 +51,7 @@ export const FIRECalculator: React.FC = () => {
     );
     setSavingPlan(false);
     if (calc) {
-      setSaveSuccess('Calculation saved successfully!');
+      setSaveSuccess('FIRE projection saved successfully!');
       setTimeout(() => setSaveSuccess(''), 4000);
     }
   };
@@ -63,10 +60,11 @@ export const FIRECalculator: React.FC = () => {
     if (!result) return;
     const exportData = result.chartData.map(pt => ({
       Year: pt.year,
-      'Projected Savings': pt.futureValue,
+      'Total Invested': pt.totalInvested,
+      'Accumulated Corpus': pt.futureValue,
       'Target FIRE Corpus': pt.inflationAdjusted,
     }));
-    exportToCSV(exportData, `${planName.replace(/\s+/g, '_')}_report`);
+    exportToCSV(exportData, `${planName.replace(/\s+/g, '_')}_fire_report`);
   };
 
   return (
@@ -74,10 +72,10 @@ export const FIRECalculator: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight flex items-center gap-2">
-            FIRE Calculator <Flame className="w-6 h-6 text-emerald-500 animate-pulse" />
+            FIRE Calculator <Flame className="w-6 h-6 text-orange-500" />
           </h1>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
-            Determine your target financial independence corpus to retire early (4% Rule).
+            Financial Independence, Retire Early — calculate your target corpus and required monthly savings.
           </p>
         </div>
 
@@ -92,29 +90,29 @@ export const FIRECalculator: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Inputs */}
+        {/* Left Inputs */}
         <div className="lg:col-span-1 space-y-6">
           <GlassCard className="border border-slate-200/50 dark:border-slate-800/40 space-y-6">
-            <h2 className="text-lg font-bold">Adjust Variables</h2>
+            <h2 className="text-lg font-bold">FIRE Parameters</h2>
 
             <Slider
-              label="Monthly Expenses (in today's values)"
-              min={5000}
+              label="Monthly Expenses"
+              min={10000}
               max={500000}
               step={5000}
               value={monthlyExpenses}
               onChange={setMonthlyExpenses}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <Slider
               label="Current Savings"
               min={0}
               max={10000000}
-              step={10000}
+              step={50000}
               value={currentSavings}
               onChange={setCurrentSavings}
-              prefixSymbol={currency === 'INR' ? '₹' : '$'}
+              prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <CustomInput
