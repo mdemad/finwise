@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { useCalculations, SavedCalculation } from '../hooks/useCalculations';
+import { useNetWorth } from '../hooks/useNetWorth';
 import { formatCurrency, formatPercent, currencies } from '../utils/formatters';
 import { GlassCard, CustomButton } from '../components/UI';
 import {
@@ -13,6 +14,8 @@ import {
   Coins,
   ShieldCheck,
   Percent,
+  Layers,
+  Scale,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -21,6 +24,7 @@ export const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const { currency } = useCurrency();
   const { calculations } = useCalculations();
+  const { summary: netWorthSummary } = useNetWorth();
 
   // Financial Tips
   const tips = [
@@ -40,18 +44,22 @@ export const Dashboard: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Compute stats based on saved calculations synchronously using useMemo
+  // Compute stats based on saved calculations and live Net Worth module synchronously using useMemo
   const { netWorth, monthlyInvest, futureWealth, inflationCorpus, dashboardChartData } = React.useMemo(() => {
-    let computedNetWorth = 0;
+    // Primary Net Worth from live NetWorth module
+    let computedNetWorth = netWorthSummary.totalAssets > 0 || netWorthSummary.totalLiabilities > 0
+      ? netWorthSummary.netWorth
+      : 0;
     let computedMonthly = 0;
     let computedFuture = 0;
     let computedInflation = 0;
 
     if (calculations.length > 0) {
-      // Net Worth check
-      const netWorthCalc = calculations.find(c => c.calculatorType === 'net_worth');
-      if (netWorthCalc && netWorthCalc.outputs?.netWorth) {
-        computedNetWorth = netWorthCalc.outputs.netWorth;
+      if (computedNetWorth === 0) {
+        const netWorthCalc = calculations.find(c => c.calculatorType === 'net_worth');
+        if (netWorthCalc && netWorthCalc.outputs?.netWorth) {
+          computedNetWorth = netWorthCalc.outputs.netWorth;
+        }
       }
 
       // monthly invest check (SIP + Goal SIP + retirement monthly + FIRE SIP)
@@ -139,18 +147,27 @@ export const Dashboard: React.FC = () => {
 
       {/* Aggregate Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <GlassCard hoverable className="border-l-4 border-l-emerald-500">
-          <div className="flex justify-between items-start">
-            <span className="text-xs font-bold text-slate-400">CURRENT NET WORTH</span>
-            <Coins className="w-4 h-4 text-emerald-500" />
-          </div>
-          <p className="text-2xl font-black tracking-tight mt-2 text-slate-800 dark:text-slate-100">
-            {formatCurrency(netWorth, currency)}
-          </p>
-          <span className="text-[10px] text-slate-400 font-semibold mt-1 block">
-            Aggregated Assets - Liabilities
-          </span>
-        </GlassCard>
+        <Link to="/networth" className="block group">
+          <GlassCard hoverable className="border-l-4 border-l-emerald-500 h-full flex flex-col justify-between">
+            <div className="flex justify-between items-start">
+              <span className="text-xs font-bold text-slate-400">CURRENT NET WORTH</span>
+              <Coins className="w-4 h-4 text-emerald-500 group-hover:scale-110 transition-transform" />
+            </div>
+            <p className="text-2xl font-black tracking-tight mt-2 text-slate-800 dark:text-slate-100">
+              {formatCurrency(netWorth, currency)}
+            </p>
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[10px] text-slate-400 font-semibold">
+                {netWorthSummary.assetCount > 0 ? `${netWorthSummary.assetCount} assets • ${netWorthSummary.categoryCount} cats` : 'Aggregated Assets - Debts'}
+              </span>
+              {netWorthSummary.totalAssets > 0 && (
+                <span className="text-[10px] font-black text-purple-500 bg-purple-500/10 px-1.5 py-0.5 rounded">
+                  Score {netWorthSummary.diversificationScore.score}/100
+                </span>
+              )}
+            </div>
+          </GlassCard>
+        </Link>
 
         <GlassCard hoverable className="border-l-4 border-l-blue-500">
           <div className="flex justify-between items-start">
