@@ -1,84 +1,114 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { User as SupabaseUser, Session } from '@supabase/supabase-js';
+import { supabase } from '../utils/supabaseClient';
 
 export interface User {
   id: string;
   email: string;
   name: string;
   currency?: string;
-  createdAt: string;
+  createdAt?: string;
 }
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<boolean>;
   signup: (name: string, email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
   updateProfile: (name: string, currency: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// API_URL is an optional absolute-URL override (e.g. for production deploys).
-// When empty (local dev), requests use relative /api/... paths which the
-// Vite dev-server proxy forwards to http://localhost:8000.
 const API_URL = import.meta.env.VITE_API_URL || '';
+
+const mapSupabaseUser = (sbUser: SupabaseUser): User => {
+  return {
+    id: sbUser.id,
+    email: sbUser.email || '',
+    name:
+      sbUser.user_metadata?.name ||
+      sbUser.user_metadata?.full_name ||
+      (sbUser.email ? sbUser.email.split('@')[0] : 'User'),
+    currency: sbUser.user_metadata?.currency || 'USD',
+    createdAt: sbUser.created_at,
+  };
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Restore session from stored JWT token on mount
-    const checkAuth = async () => {
+    let mounted = true;
+
+    const initAuth = async () => {
       try {
-        const token = localStorage.getItem('finwise-token');
-        if (token) {
-          const res = await fetch(`${API_URL}/api/auth/me`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setUser(data);
+        const {
+          data: { session: initialSession },
+        } = await supabase.auth.getSession();
+        if (mounted) {
+          setSession(initialSession);
+          if (initialSession?.user) {
+            setUser(mapSupabaseUser(initialSession.user));
           } else {
-            // Token is expired or invalid — clear it
-            localStorage.removeItem('finwise-token');
+            setUser(null);
           }
         }
       } catch (err) {
-        console.error('Session restoration failed:', err);
-        localStorage.removeItem('finwise-token');
+        console.error('Failed to restore Supabase auth session:', err);
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
-    checkAuth();
+    initAuth();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      if (mounted) {
+        setSession(currentSession);
+        if (currentSession?.user) {
+          setUser(mapSupabaseUser(currentSession.user));
+        } else {
+          setUser(null);
+        }
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+      const { data, error: sbError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
-      if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem('finwise-token', data.token);
-        setUser(data.user);
-        setLoading(false);
-        return true;
-      } else {
-        const errData = await res.json();
-        throw new Error(errData.detail || 'Login failed');
+      if (sbError) throw sbError;
+      if (data.session) {
+        setSession(data.session);
+        setUser(mapSupabaseUser(data.user));
       }
+      setLoading(false);
+      return true;
     } catch (err: any) {
-      setError(err.message || 'An error occurred during login');
+      setError(err.message || 'Login failed');
       setLoading(false);
       return false;
     }
@@ -88,58 +118,96 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+      const { data, error: sbError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { name },
+        },
       });
-      if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem('finwise-token', data.token);
-        setUser(data.user);
-        setLoading(false);
-        return true;
-      } else {
-        const errData = await res.json();
-        throw new Error(errData.detail || 'Registration failed');
+      if (sbError) throw sbError;
+      if (data.user) {
+        if (data.session) {
+          setSession(data.session);
+          setUser(mapSupabaseUser(data.user));
+        }
       }
+      setLoading(false);
+      return true;
     } catch (err: any) {
-      setError(err.message || 'An error occurred during signup');
+      setError(err.message || 'Registration failed');
       setLoading(false);
       return false;
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('finwise-token');
+  const loginWithGoogle = async (): Promise<void> => {
+    setError(null);
+    try {
+      const { error: sbError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+      if (sbError) throw sbError;
+    } catch (err: any) {
+      setError(err.message || 'Google authentication failed');
+    }
+  };
+
+  const logout = async (): Promise<void> => {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error('Sign out error:', err);
+    } finally {
+      setUser(null);
+      setSession(null);
+    }
   };
 
   const updateProfile = async (name: string, currency: string): Promise<boolean> => {
     if (!user) return false;
     try {
-      const token = localStorage.getItem('finwise-token');
-      const res = await fetch(`${API_URL}/api/auth/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name, currency }),
+      const { data, error: sbError } = await supabase.auth.updateUser({
+        data: { name, currency },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data);
-        return true;
+      if (sbError) throw sbError;
+      if (data.user) {
+        setUser(mapSupabaseUser(data.user));
       }
-    } catch (err) {
+      if (session?.access_token) {
+        await fetch(`${API_URL}/api/auth/profile`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ name, currency }),
+        }).catch((err) => console.warn('Backend profile sync failed:', err));
+      }
+      return true;
+    } catch (err: any) {
       console.error('Profile update failed:', err);
+      return false;
     }
-    return false;
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, signup, logout, updateProfile }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        loading,
+        error,
+        login,
+        signup,
+        loginWithGoogle,
+        logout,
+        updateProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

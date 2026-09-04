@@ -1,204 +1,183 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
-from jose import jwt, JWTError
-from datetime import datetime, timedelta
-from pwdlib import PasswordHash
+import jwt
+from jwt import PyJWKClient
+from datetime import datetime, timezone
 from app.config import settings
-from app.models.schemas import (
-    UserCreate,
-    UserLogin,
-    UserResponse,
-    TokenResponse,
-    UserUpdate,
-)
-import uuid
+from app.models.schemas import UserResponse, UserUpdate
+import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Password hashing
-password_hash = PasswordHash.recommended()
-
-# Thread-safe in-memory database simulation when Supabase isn't supplied
+# Thread-safe in-memory user table
 MOCK_USERS = {}
 
-
-def get_password_hash(password: str) -> str:
-    return password_hash.hash(password)
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return password_hash.verify(plain_password, hashed_password)
+# Global JWK client cache per JWKS URL
+_jwks_clients = {}
 
 
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-    to_encode.update({"exp": expire})
+def get_jwks_client(supabase_url: str) -> PyJWKClient:
+    jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+    if jwks_url not in _jwks_clients:
+        _jwks_clients[jwks_url] = PyJWKClient(jwks_url)
+    return _jwks_clients[jwks_url]
 
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.JWT_SECRET,
-        algorithm=settings.ALGORITHM,
-    )
 
-    return encoded_jwt
+def verify_supabase_token(token: str) -> dict:
+    """
+    Cryptographically verifies a Supabase Auth access token.
+    Enforces strict signature verification (`verify_signature=True`) and expiration (`verify_exp=True`).
+    Uses the project's official JWKS endpoint (ES256 / RS256) or explicit SUPABASE_JWT_SECRET (HS256).
+    Legacy custom FinWise JWT tokens signed with old JWT_SECRET are strictly rejected.
+    """
+    try:
+        header = jwt.get_unverified_header(token)
+        alg = header.get("alg")
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization token format",
+        )
+
+    supabase_url = settings.SUPABASE_URL or os.getenv("VITE_SUPABASE_URL", "")
+    supabase_jwt_secret = settings.SUPABASE_JWT_SECRET
+
+    payload = None
+    verification_error = None
+
+    decode_options = {
+        "verify_signature": True,
+        "verify_exp": True,
+        "verify_aud": False,  # Validated explicitly below
+    }
+
+    # 1. Asymmetric signature verification via Supabase JWKS (ES256 / RS256 / PS256)
+    if alg in ["ES256", "RS256", "PS256"] and supabase_url:
+        try:
+            jwks_client = get_jwks_client(supabase_url)
+            signing_key = jwks_client.get_signing_key_from_jwt(token)
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=[alg],
+                options=decode_options,
+            )
+        except Exception as err:
+            verification_error = f"JWKS verification failed: {str(err)}"
+
+    # 2. Symmetric signature verification via explicit SUPABASE_JWT_SECRET ONLY (HS256)
+    # Note: We explicitly DO NOT fall back to legacy JWT_SECRET.
+    elif alg == "HS256" and supabase_jwt_secret:
+        try:
+            payload = jwt.decode(
+                token,
+                supabase_jwt_secret,
+                algorithms=["HS256"],
+                options=decode_options,
+            )
+        except Exception as err:
+            verification_error = f"Symmetric secret verification failed: {str(err)}"
+
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Could not validate credentials: {verification_error or 'Unsupported token algorithm or missing verification key'}",
+        )
+
+    # Validate Supabase Auth sub claim
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token missing sub claim",
+        )
+
+    # Validate aud claim if present
+    aud = payload.get("aud")
+    if aud and aud != "authenticated":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token audience",
+        )
+
+    # Validate iss claim if present
+    iss = payload.get("iss")
+    if iss and supabase_url:
+        expected_prefix = supabase_url.rstrip("/")
+        if not iss.startswith(expected_prefix):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token issuer",
+            )
+
+    return payload
 
 
 def get_current_user(
-    authorization: str = Header(..., description="Bearer JWT Token"),
+    authorization: str | None = Header(None, description="Bearer JWT Token"),
 ) -> dict:
-    if not authorization.startswith("Bearer "):
+    """
+    FastAPI dependency ensuring request has a valid Supabase Auth JWT token.
+    Extracts the authenticated Supabase user UUID from `sub`.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization format. Must be Bearer <token>",
         )
 
-    token = authorization.split(" ")[1]
-
-    try:
-        payload = jwt.decode(
-            token,
-            settings.JWT_SECRET,
-            algorithms=[settings.ALGORITHM],
-        )
-
-        user_id = payload.get("sub")
-
-        if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token payload",
-            )
-
-        if settings.SUPABASE_URL and settings.SUPABASE_KEY:
-            # Future Supabase lookup
-            pass
-
-        if user_id in MOCK_USERS:
-            return MOCK_USERS[user_id]
-
-        return {
-            "id": user_id,
-            "email": payload.get("email", ""),
-            "name": payload.get("name", "User"),
-            "currency": "USD",
-            "createdAt": datetime.utcnow(),
-        }
-
-    except JWTError:
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail="Missing access token",
         )
 
+    payload = verify_supabase_token(token)
+    user_id = payload["sub"]
 
-@router.post("/signup", response_model=TokenResponse)
-async def signup(user_in: UserCreate):
-    # Check if email already exists
-    for user in MOCK_USERS.values():
-        if user["email"] == user_in.email:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered",
-            )
+    email = payload.get("email", "")
+    user_metadata = payload.get("user_metadata", {})
+    name = (
+        user_metadata.get("name")
+        or user_metadata.get("full_name")
+        or payload.get("name")
+        or (email.split("@")[0] if email else "User")
+    )
+    currency = user_metadata.get("currency", "USD")
 
-    user_id = str(uuid.uuid4())
+    # Maintain user in memory keyed by Supabase Auth UUID (no email auto-merging)
+    if user_id not in MOCK_USERS:
+        MOCK_USERS[user_id] = {
+            "id": user_id,
+            "email": email,
+            "name": name,
+            "currency": currency,
+            "createdAt": datetime.now(timezone.utc),
+        }
+    else:
+        if name and name != "User":
+            MOCK_USERS[user_id]["name"] = name
+        if email:
+            MOCK_USERS[user_id]["email"] = email
 
-    hashed_pwd = get_password_hash(user_in.password)
-
-    new_user = {
-        "id": user_id,
-        "email": user_in.email,
-        "name": user_in.name,
-        "password": hashed_pwd,
-        "currency": "USD",
-        "createdAt": datetime.utcnow(),
-    }
-
-    MOCK_USERS[user_id] = new_user
-
+    # Safely insert/update user in Supabase application `users` table
     if settings.SUPABASE_URL and settings.SUPABASE_KEY:
         try:
             from supabase import create_client
+            supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+            supabase.table("users").upsert({
+                "id": user_id,
+                "email": email,
+                "name": name,
+                "currency": currency,
+            }).execute()
+        except Exception as err:
+            logger.warning("Supabase application users table upsert note: %s", type(err).__name__)
 
-            supabase = create_client(
-                settings.SUPABASE_URL,
-                settings.SUPABASE_KEY,
-            )
-
-            supabase.table("users").insert(
-                {
-                    "id": user_id,
-                    "email": user_in.email,
-                    "name": user_in.name,
-                    "currency": "USD",
-                    "created_at": datetime.utcnow().isoformat(),
-                }
-            ).execute()
-
-        except Exception as e:
-            print(f"Supabase sync failed: {e}")
-
-    token = create_access_token(
-        {
-            "sub": user_id,
-            "email": user_in.email,
-            "name": user_in.name,
-        }
-    )
-
-    return {
-        "token": token,
-        "user": UserResponse(
-            id=user_id,
-            email=user_in.email,
-            name=user_in.name,
-            currency="USD",
-            createdAt=new_user["createdAt"],
-        ),
-    }
-
-
-@router.post("/login", response_model=TokenResponse)
-async def login(user_in: UserLogin):
-    found_user = None
-
-    for user in MOCK_USERS.values():
-        if user["email"] == user_in.email:
-            found_user = user
-            break
-
-    if (
-        found_user is None
-        or not verify_password(
-            user_in.password,
-            found_user["password"],
-        )
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-        )
-
-    token = create_access_token(
-        {
-            "sub": found_user["id"],
-            "email": found_user["email"],
-            "name": found_user["name"],
-        }
-    )
-
-    return {
-        "token": token,
-        "user": UserResponse(
-            id=found_user["id"],
-            email=found_user["email"],
-            name=found_user["name"],
-            currency=found_user.get("currency", "USD"),
-            createdAt=found_user["createdAt"],
-        ),
-    }
+    return MOCK_USERS[user_id]
 
 
 @router.get("/me", response_model=UserResponse)
@@ -208,7 +187,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         email=current_user["email"],
         name=current_user["name"],
         currency=current_user.get("currency", "USD"),
-        createdAt=current_user.get("createdAt", datetime.utcnow()),
+        createdAt=current_user.get("createdAt", datetime.now(timezone.utc)),
     )
 
 
@@ -226,26 +205,18 @@ async def update_profile(
     if settings.SUPABASE_URL and settings.SUPABASE_KEY:
         try:
             from supabase import create_client
-
-            supabase = create_client(
-                settings.SUPABASE_URL,
-                settings.SUPABASE_KEY,
-            )
-
-            supabase.table("users").update(
-                {
-                    "name": profile_in.name,
-                    "currency": profile_in.currency,
-                }
-            ).eq("id", user_id).execute()
-
-        except Exception as e:
-            print(f"Supabase sync failed: {e}")
+            supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+            supabase.table("users").update({
+                "name": profile_in.name,
+                "currency": profile_in.currency,
+            }).eq("id", user_id).execute()
+        except Exception as err:
+            logger.warning("Supabase profile update note: %s", type(err).__name__)
 
     return UserResponse(
         id=user_id,
         email=current_user["email"],
         name=profile_in.name,
         currency=profile_in.currency,
-        createdAt=current_user.get("createdAt", datetime.utcnow()),
+        createdAt=current_user.get("createdAt", datetime.now(timezone.utc)),
     )

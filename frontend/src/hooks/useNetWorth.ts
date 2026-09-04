@@ -8,7 +8,6 @@ import {
   WealthSummary,
   calculateWealthSummary,
 } from '../utils/wealthConfig';
-import { CurrencyCode } from '../utils/formatters';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -143,7 +142,7 @@ const DEFAULT_SAMPLE_SNAPSHOTS: NetWorthSnapshot[] = [
 ];
 
 export function useNetWorth() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { currency } = useCurrency();
 
   const [assets, setAssets] = useState<AssetItem[]>([]);
@@ -164,8 +163,8 @@ export function useNetWorth() {
     setError(null);
     try {
       if (user) {
-        const token = localStorage.getItem('finwise-token');
-        const headers = { Authorization: `Bearer ${token}` };
+        const token = session?.access_token;
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
         const [assetsRes, liabsRes, snapsRes] = await Promise.all([
           fetch(`${API_URL}/api/net-worth/assets`, { headers }),
@@ -180,7 +179,6 @@ export function useNetWorth() {
             snapsRes.json(),
           ]);
 
-          // If brand new account with 0 records, pre-seed sample data to give instant delight
           if (assetsData.length === 0 && liabsData.length === 0) {
             setAssets(DEFAULT_SAMPLE_ASSETS);
             setLiabilities(DEFAULT_SAMPLE_LIABILITIES);
@@ -200,43 +198,31 @@ export function useNetWorth() {
       const savedLiabs = localStorage.getItem(liabsKey);
       const savedSnaps = localStorage.getItem(snapsKey);
 
-      if (savedAssets) {
-        setAssets(JSON.parse(savedAssets));
+      if (savedAssets || savedLiabs) {
+        setAssets(savedAssets ? JSON.parse(savedAssets) : []);
+        setLiabilities(savedLiabs ? JSON.parse(savedLiabs) : []);
+        setSnapshots(savedSnaps ? JSON.parse(savedSnaps) : DEFAULT_SAMPLE_SNAPSHOTS);
       } else {
         setAssets(DEFAULT_SAMPLE_ASSETS);
-        localStorage.setItem(assetsKey, JSON.stringify(DEFAULT_SAMPLE_ASSETS));
-      }
-
-      if (savedLiabs) {
-        setLiabilities(JSON.parse(savedLiabs));
-      } else {
         setLiabilities(DEFAULT_SAMPLE_LIABILITIES);
-        localStorage.setItem(liabsKey, JSON.stringify(DEFAULT_SAMPLE_LIABILITIES));
-      }
-
-      if (savedSnaps) {
-        setSnapshots(JSON.parse(savedSnaps));
-      } else {
         setSnapshots(DEFAULT_SAMPLE_SNAPSHOTS);
-        localStorage.setItem(snapsKey, JSON.stringify(DEFAULT_SAMPLE_SNAPSHOTS));
       }
-    } catch (err: any) {
-      console.error('Failed to load Net Worth data:', err);
-      setError(err.message || 'Failed to sync with wealth database');
-      // Fallback
+    } catch (err) {
+      console.error('Failed to fetch net worth data:', err);
+      setError('Unable to load wealth data. Using local cache.');
       setAssets(DEFAULT_SAMPLE_ASSETS);
       setLiabilities(DEFAULT_SAMPLE_LIABILITIES);
       setSnapshots(DEFAULT_SAMPLE_SNAPSHOTS);
     } finally {
       setLoading(false);
     }
-  }, [user, assetsKey, liabsKey, snapsKey]);
+  }, [user, session, assetsKey, liabsKey, snapsKey]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Synchronous, deterministic wealth computation
+  // Derived overall wealth metrics
   const summary: WealthSummary = useMemo(() => {
     return calculateWealthSummary(assets, liabilities);
   }, [assets, liabilities]);
@@ -248,29 +234,29 @@ export function useNetWorth() {
     try {
       const newAsset: AssetItem = {
         ...assetData,
-        id: `asset-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        id: `asset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         currency: assetData.currency || currency,
         createdAt: new Date().toISOString(),
       };
 
       if (user) {
-        const token = localStorage.getItem('finwise-token');
+        const token = session?.access_token;
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
         const res = await fetch(`${API_URL}/api/net-worth/assets`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+          headers,
           body: JSON.stringify(assetData),
         });
         if (res.ok) {
           const created = await res.json();
-          setAssets(prev => [created, ...prev]);
+          setAssets((prev) => [created, ...prev]);
           return created;
         }
       }
 
-      // Local update
       const updated = [newAsset, ...assets];
       setAssets(updated);
       localStorage.setItem(assetsKey, JSON.stringify(updated));
@@ -284,23 +270,26 @@ export function useNetWorth() {
   const updateAsset = async (id: string, updates: Partial<AssetItem>): Promise<boolean> => {
     try {
       if (user) {
-        const token = localStorage.getItem('finwise-token');
+        const token = session?.access_token;
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
         const res = await fetch(`${API_URL}/api/net-worth/assets/${id}`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+          headers,
           body: JSON.stringify(updates),
         });
         if (res.ok) {
           const updatedItem = await res.json();
-          setAssets(prev => prev.map(a => (a.id === id ? updatedItem : a)));
+          setAssets((prev) => prev.map((a) => (a.id === id ? updatedItem : a)));
           return true;
         }
       }
 
-      const updated = assets.map(a => (a.id === id ? { ...a, ...updates, updatedAt: new Date().toISOString() } : a));
+      const updated = assets.map((a) =>
+        a.id === id ? { ...a, ...updates, updatedAt: new Date().toISOString() } : a
+      );
       setAssets(updated);
       localStorage.setItem(assetsKey, JSON.stringify(updated));
       return true;
@@ -313,18 +302,19 @@ export function useNetWorth() {
   const deleteAsset = async (id: string): Promise<boolean> => {
     try {
       if (user) {
-        const token = localStorage.getItem('finwise-token');
+        const token = session?.access_token;
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
         const res = await fetch(`${API_URL}/api/net-worth/assets/${id}`, {
           method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
+          headers,
         });
         if (res.ok) {
-          setAssets(prev => prev.filter(a => a.id !== id));
+          setAssets((prev) => prev.filter((a) => a.id !== id));
           return true;
         }
       }
 
-      const updated = assets.filter(a => a.id !== id);
+      const updated = assets.filter((a) => a.id !== id);
       setAssets(updated);
       localStorage.setItem(assetsKey, JSON.stringify(updated));
       return true;
@@ -341,24 +331,25 @@ export function useNetWorth() {
     try {
       const newLiab: LiabilityItem = {
         ...liabData,
-        id: `liab-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        id: `liab-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         currency: liabData.currency || currency,
         createdAt: new Date().toISOString(),
       };
 
       if (user) {
-        const token = localStorage.getItem('finwise-token');
+        const token = session?.access_token;
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
         const res = await fetch(`${API_URL}/api/net-worth/liabilities`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+          headers,
           body: JSON.stringify(liabData),
         });
         if (res.ok) {
           const created = await res.json();
-          setLiabilities(prev => [created, ...prev]);
+          setLiabilities((prev) => [created, ...prev]);
           return created;
         }
       }
@@ -376,23 +367,24 @@ export function useNetWorth() {
   const updateLiability = async (id: string, updates: Partial<LiabilityItem>): Promise<boolean> => {
     try {
       if (user) {
-        const token = localStorage.getItem('finwise-token');
+        const token = session?.access_token;
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
         const res = await fetch(`${API_URL}/api/net-worth/liabilities/${id}`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+          headers,
           body: JSON.stringify(updates),
         });
         if (res.ok) {
           const updatedItem = await res.json();
-          setLiabilities(prev => prev.map(l => (l.id === id ? updatedItem : l)));
+          setLiabilities((prev) => prev.map((l) => (l.id === id ? updatedItem : l)));
           return true;
         }
       }
 
-      const updated = liabilities.map(l =>
+      const updated = liabilities.map((l) =>
         l.id === id ? { ...l, ...updates, updatedAt: new Date().toISOString() } : l
       );
       setLiabilities(updated);
@@ -407,18 +399,19 @@ export function useNetWorth() {
   const deleteLiability = async (id: string): Promise<boolean> => {
     try {
       if (user) {
-        const token = localStorage.getItem('finwise-token');
+        const token = session?.access_token;
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
         const res = await fetch(`${API_URL}/api/net-worth/liabilities/${id}`, {
           method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
+          headers,
         });
         if (res.ok) {
-          setLiabilities(prev => prev.filter(l => l.id !== id));
+          setLiabilities((prev) => prev.filter((l) => l.id !== id));
           return true;
         }
       }
 
-      const updated = liabilities.filter(l => l.id !== id);
+      const updated = liabilities.filter((l) => l.id !== id);
       setLiabilities(updated);
       localStorage.setItem(liabsKey, JSON.stringify(updated));
       return true;
@@ -447,13 +440,14 @@ export function useNetWorth() {
 
     try {
       if (user) {
-        const token = localStorage.getItem('finwise-token');
+        const token = session?.access_token;
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
         const res = await fetch(`${API_URL}/api/net-worth/history`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+          headers,
           body: JSON.stringify({
             date: newSnapshot.date,
             totalAssets: newSnapshot.totalAssets,
@@ -463,7 +457,7 @@ export function useNetWorth() {
         });
         if (res.ok) {
           const created = await res.json();
-          setSnapshots(prev => [...prev, created]);
+          setSnapshots((prev) => [...prev, created]);
           return created;
         }
       }

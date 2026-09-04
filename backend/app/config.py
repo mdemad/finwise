@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # Supabase credentials (optional - falls back to local sqlite/in-memory if not provided)
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+    SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET", "")
     
     # Currency API key (currencyapi.com primary provider)
     # Get a free key at: https://currencyapi.com
@@ -29,4 +30,3 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
 
 settings = Settings()
-

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 export interface SavedCalculation {
   id: string;
   userId?: string;
-  calculatorType: string; // 'sip' | 'lump_sum' | 'inflation' | 'goal' | 'retirement' | 'fire' | 'emergency' | 'emi' | 'net_worth'
+  calculatorType: string;
   name: string;
   inputs: any;
   outputs: any;
@@ -15,7 +15,7 @@ export interface SavedCalculation {
 const API_URL = import.meta.env.VITE_API_URL || '';
 
 export function useCalculations() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [calculations, setCalculations] = useState<SavedCalculation[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -28,9 +28,9 @@ export function useCalculations() {
     setLoading(true);
     try {
       if (API_URL) {
-        const token = localStorage.getItem('finwise-token');
+        const token = session?.access_token;
         const res = await fetch(`${API_URL}/api/calculations`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (res.ok) {
           const data = await res.json();
@@ -41,7 +41,7 @@ export function useCalculations() {
         const saved = localStorage.getItem('finwise-calculations') || '[]';
         const parsed = JSON.parse(saved) as SavedCalculation[];
         // Filter by current user
-        const userCalcs = parsed.filter(c => c.userId === user.id);
+        const userCalcs = parsed.filter((c) => c.userId === user.id);
         setCalculations(userCalcs);
       }
     } catch (err) {
@@ -53,7 +53,7 @@ export function useCalculations() {
 
   useEffect(() => {
     fetchCalculations();
-  }, [user]);
+  }, [user, session]);
 
   // Save a new calculation
   const saveCalculation = async (
@@ -76,18 +76,18 @@ export function useCalculations() {
 
     try {
       if (API_URL) {
-        const token = localStorage.getItem('finwise-token');
+        const token = session?.access_token;
         const res = await fetch(`${API_URL}/api/calculations`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify(newCalc),
         });
         if (res.ok) {
           const saved = await res.json();
-          setCalculations(prev => [saved, ...prev]);
+          setCalculations((prev) => [saved, ...prev]);
           return saved;
         }
       } else {
@@ -96,11 +96,11 @@ export function useCalculations() {
         const parsed = JSON.parse(saved) as SavedCalculation[];
         const item: SavedCalculation = {
           ...newCalc,
-          id: Math.random().toString(36).substr(2, 9),
+          id: Math.random().toString(36).substring(2, 11),
         };
         parsed.unshift(item);
         localStorage.setItem('finwise-calculations', JSON.stringify(parsed));
-        setCalculations(prev => [item, ...prev]);
+        setCalculations((prev) => [item, ...prev]);
         return item;
       }
     } catch (err) {
@@ -113,14 +113,14 @@ export function useCalculations() {
   const toggleFavorite = async (id: string): Promise<boolean> => {
     try {
       if (API_URL) {
-        const token = localStorage.getItem('finwise-token');
+        const token = session?.access_token;
         const res = await fetch(`${API_URL}/api/calculations/${id}/favorite`, {
           method: 'PATCH',
-          headers: { Authorization: `Bearer ${token}` },
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (res.ok) {
-          setCalculations(prev =>
-            prev.map(c => (c.id === id ? { ...c, favorite: !c.favorite } : c))
+          setCalculations((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, favorite: !c.favorite } : c))
           );
           return true;
         }
@@ -128,10 +128,10 @@ export function useCalculations() {
         // LocalStorage update
         const saved = localStorage.getItem('finwise-calculations') || '[]';
         const parsed = JSON.parse(saved) as SavedCalculation[];
-        const updated = parsed.map(c => (c.id === id ? { ...c, favorite: !c.favorite } : c));
+        const updated = parsed.map((c) => (c.id === id ? { ...c, favorite: !c.favorite } : c));
         localStorage.setItem('finwise-calculations', JSON.stringify(updated));
-        setCalculations(prev =>
-          prev.map(c => (c.id === id ? { ...c, favorite: !c.favorite } : c))
+        setCalculations((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, favorite: !c.favorite } : c))
         );
         return true;
       }
@@ -145,22 +145,22 @@ export function useCalculations() {
   const deleteCalculation = async (id: string): Promise<boolean> => {
     try {
       if (API_URL) {
-        const token = localStorage.getItem('finwise-token');
+        const token = session?.access_token;
         const res = await fetch(`${API_URL}/api/calculations/${id}`, {
           method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (res.ok) {
-          setCalculations(prev => prev.filter(c => c.id !== id));
+          setCalculations((prev) => prev.filter((c) => c.id !== id));
           return true;
         }
       } else {
         // LocalStorage delete
         const saved = localStorage.getItem('finwise-calculations') || '[]';
         const parsed = JSON.parse(saved) as SavedCalculation[];
-        const filtered = parsed.filter(c => c.id !== id);
+        const filtered = parsed.filter((c) => c.id !== id);
         localStorage.setItem('finwise-calculations', JSON.stringify(filtered));
-        setCalculations(prev => prev.filter(c => c.id !== id));
+        setCalculations((prev) => prev.filter((c) => c.id !== id));
         return true;
       }
     } catch (err) {
