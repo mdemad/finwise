@@ -94,7 +94,7 @@ export const LearningSection: React.FC = () => {
           <div className="grid grid-cols-1 gap-6">
             {guides.map((g, i) => (
               <GlassCard key={i} className="border border-slate-200/50 dark:border-slate-800/40 p-5 space-y-3">
-                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-850 pb-2">
+                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
                   <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">{g.title}</h3>
                   <Link to={g.path} className="text-xs text-emerald-500 font-bold flex items-center gap-0.5 hover:underline">
                     Go to Calculator <ArrowUpRight className="w-3.5 h-3.5" />
@@ -124,7 +124,7 @@ export const LearningSection: React.FC = () => {
                 </button>
 
                 {activeFaq === idx && (
-                  <p className="text-[11px] text-slate-550 dark:text-slate-400 mt-3 leading-relaxed border-t border-slate-100 dark:border-slate-850 pt-2 animate-fadeIn">
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-3 leading-relaxed border-t border-slate-100 dark:border-slate-800 pt-2 animate-fadeIn">
                     {faq.a}
                   </p>
                 )}

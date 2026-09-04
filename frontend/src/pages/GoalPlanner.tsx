@@ -226,15 +226,15 @@ export const GoalPlanner: React.FC = () => {
                 <div>
                   <h3 className="text-sm font-bold text-slate-400 mb-3 uppercase">Goal Timeline Planning</h3>
                   <div className="space-y-3">
-                    <div className="flex justify-between border-b border-slate-100 dark:border-slate-850 pb-2">
+                    <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
                       <span className="text-xs font-semibold text-slate-500">Goal Term</span>
                       <span className="text-xs font-bold">{yearsRemaining} Years ({yearsRemaining * 12} Months)</span>
                     </div>
-                    <div className="flex justify-between border-b border-slate-100 dark:border-slate-850 pb-2">
+                    <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
                       <span className="text-xs font-semibold text-slate-500">Compounding Rate</span>
                       <span className="text-xs font-bold text-emerald-500">{expectedReturn}% p.a.</span>
                     </div>
-                    <div className="flex justify-between border-b border-slate-100 dark:border-slate-850 pb-2">
+                    <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
                       <span className="text-xs font-semibold text-slate-500">Inflation Rate</span>
                       <span className="text-xs font-bold text-yellow-500">{inflationRate}% p.a.</span>
                     </div>

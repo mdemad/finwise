@@ -146,7 +146,7 @@ export const WhatIfSimulator: React.FC = () => {
                   <span className="text-slate-500">Future Value:</span>
                   <span className="text-emerald-500">{formatCurrency(sipOut.finalCorpus, currency)}</span>
                 </div>
-                <div className="flex justify-between text-xs font-semibold border-t border-dashed border-slate-100 dark:border-slate-850 pt-2">
+                <div className="flex justify-between text-xs font-semibold border-t border-dashed border-slate-100 dark:border-slate-800 pt-2">
                   <span className="text-slate-500">Purchasing Power:</span>
                   <span className="text-yellow-500">{formatCurrency(sipOut.inflationAdjustedCorpus, currency)}</span>
                 </div>
@@ -188,7 +188,7 @@ export const WhatIfSimulator: React.FC = () => {
                   <span className="text-slate-500">Retirement Corpus:</span>
                   <span className="text-emerald-500">{formatCurrency(retOut.retirementCorpus, currency)}</span>
                 </div>
-                <div className="flex justify-between text-xs font-semibold border-t border-dashed border-slate-100 dark:border-slate-850 pt-2">
+                <div className="flex justify-between text-xs font-semibold border-t border-dashed border-slate-100 dark:border-slate-800 pt-2">
                   <span className="text-slate-500">Sustainability:</span>
                   <span className={retOut.isSustainable ? 'text-emerald-500' : 'text-red-500'}>
                     {retOut.yearsSustained >= 50 ? '50+ Years' : `${retOut.yearsSustained} Years`}
@@ -211,7 +211,7 @@ export const WhatIfSimulator: React.FC = () => {
                   <span className="text-slate-500">Future Goal Cost:</span>
                   <span className="text-yellow-500">{formatCurrency(goalOut.futureGoalCost, currency)}</span>
                 </div>
-                <div className="flex justify-between text-xs font-semibold border-t border-dashed border-slate-100 dark:border-slate-850 pt-2">
+                <div className="flex justify-between text-xs font-semibold border-t border-dashed border-slate-100 dark:border-slate-800 pt-2">
                   <span className="text-slate-500">Required Monthly SIP:</span>
                   <span className="text-emerald-500">{formatCurrency(goalOut.requiredMonthlySip, currency)}</span>
                 </div>

@@ -46,21 +46,12 @@ export const Dashboard: React.FC = () => {
 
   // Compute stats based on saved calculations and live Net Worth module synchronously using useMemo
   const { netWorth, monthlyInvest, futureWealth, inflationCorpus, dashboardChartData } = React.useMemo(() => {
-    // Primary Net Worth from live NetWorth module
-    let computedNetWorth = netWorthSummary.totalAssets > 0 || netWorthSummary.totalLiabilities > 0
-      ? netWorthSummary.netWorth
-      : 0;
+    let computedNetWorth = netWorthSummary.netWorth;
     let computedMonthly = 0;
     let computedFuture = 0;
     let computedInflation = 0;
 
     if (calculations.length > 0) {
-      if (computedNetWorth === 0) {
-        const netWorthCalc = calculations.find(c => c.calculatorType === 'net_worth');
-        if (netWorthCalc && netWorthCalc.outputs?.netWorth) {
-          computedNetWorth = netWorthCalc.outputs.netWorth;
-        }
-      }
 
       // monthly invest check (SIP + Goal SIP + retirement monthly + FIRE SIP)
       let sipSum = 0;

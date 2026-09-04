@@ -1,63 +1,65 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
 import { useCalculations } from '../hooks/useCalculations';
-import { calculateInflation, InflationInputs, InflationResult } from '../utils/calculations';
+import { calculateInflation, InflationInputs } from '../utils/calculations';
 import { formatCurrency, getCurrencySymbol } from '../utils/formatters';
-import { exportToCSV, triggerPrint } from '../utils/exporters';
-import { GlassCard, Slider, CustomButton, CustomInput } from '../components/UI';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { ArrowDownToLine, Printer, Save, Percent } from 'lucide-react';
+import { GlassCard, Slider, CustomInput, CustomButton } from '../components/UI';
+import { Percent, Save, ArrowDownToLine, Printer } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { exportToCSV, triggerPrint } from '../utils/exporters';
 
 export const InflationCalculator: React.FC = () => {
   const { currency } = useCurrency();
   const { user } = useAuth();
   const { saveCalculation } = useCalculations();
 
-  const [currentCost, setCurrentCost] = useState(100000);
-  const [inflationRate, setInflationRate] = useState(6);
-  const [years, setYears] = useState(10);
+  const [currentCost, setCurrentCost] = useState<number>(100000);
+  const [inflationRate, setInflationRate] = useState<number>(6);
+  const [durationYears, setDurationYears] = useState<number>(10);
 
-  const [planName, setPlanName] = useState('My Inflation Plan');
+  const [planName, setPlanName] = useState('Inflation Plan');
   const [savingPlan, setSavingPlan] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
 
-  // Synchronous memoized calculation results
-  const result: InflationResult = React.useMemo(() => {
-    const inputs: InflationInputs = { currentCost, inflationRate, years };
+  const inputs: InflationInputs = useMemo(
+    () => ({
+      currentCost,
+      inflationRate,
+      years: durationYears,
+    }),
+    [currentCost, inflationRate, durationYears]
+  );
+
+  const result = useMemo(() => {
     return calculateInflation(inputs);
-  }, [currentCost, inflationRate, years]);
+  }, [inputs]);
 
   const handleSave = async () => {
-    if (!user) return;
+    if (!user || !result) return;
     setSavingPlan(true);
-    setSaveSuccess('');
-    const calc = await saveCalculation(
-      'inflation',
-      planName,
-      { currentCost, inflationRate, years },
-      result
-    );
+    const saved = await saveCalculation('inflation', planName, inputs, result);
     setSavingPlan(false);
-    if (calc) {
-      setSaveSuccess('Calculation saved successfully!');
-      setTimeout(() => setSaveSuccess(''), 4000);
+    if (saved) {
+      setSaveSuccess('Saved successfully to your dashboard!');
+      setTimeout(() => setSaveSuccess(''), 3000);
     }
   };
 
   const handleExportCSV = () => {
     if (!result) return;
-    const exportData = result.chartData.map(pt => ({
-      Year: pt.year,
+    const exportData = result.chartData.map((pt) => ({
+      Year: pt.label,
       'Future Cost': pt.futureValue,
       'Purchasing Power': pt.totalInvested,
     }));
-    exportToCSV(exportData, `${planName.replace(/\s+/g, '_')}_report`);
+    exportToCSV(exportData, `${planName.replace(/\s+/g, '_')}_inflation_report`);
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 page-transition">
+      {/* Header Panel */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight flex items-center gap-2">
@@ -68,34 +70,38 @@ export const InflationCalculator: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <CustomButton variant="ghost" size="sm" onClick={handleExportCSV} className="gap-1.5 text-xs font-semibold">
-            <ArrowDownToLine className="w-4 h-4" /> CSV Report
-          </CustomButton>
-          <CustomButton variant="ghost" size="sm" onClick={triggerPrint} className="gap-1.5 text-xs font-semibold">
-            <Printer className="w-4 h-4" /> Print PDF
-          </CustomButton>
-        </div>
+        {/* Export Options */}
+        {result && (
+          <div className="flex flex-wrap items-center gap-2">
+            <CustomButton variant="ghost" size="sm" onClick={handleExportCSV} className="gap-1.5 text-xs font-semibold">
+              <ArrowDownToLine className="w-4 h-4" /> CSV Report
+            </CustomButton>
+            <CustomButton variant="ghost" size="sm" onClick={triggerPrint} className="gap-1.5 text-xs font-semibold">
+              <Printer className="w-4 h-4" /> Print PDF
+            </CustomButton>
+          </div>
+        )}
       </div>
 
+      {/* Main Grid: Inputs Left, Outputs Right */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Inputs */}
-        <div className="lg:col-span-1 space-y-6">
-          <GlassCard className="border border-slate-200/50 dark:border-slate-800/40 space-y-6">
+        {/* Left Side: Variables Card */}
+        <div className="space-y-6">
+          <GlassCard className="border border-slate-200/50 dark:border-slate-800/40 p-6 space-y-6">
             <h2 className="text-lg font-bold">Adjust Variables</h2>
 
             <Slider
               label="Current Cost of Goods"
               min={1000}
               max={5000000}
-              step={5000}
+              step={1000}
               value={currentCost}
               onChange={setCurrentCost}
               prefixSymbol={getCurrencySymbol(currency)}
             />
 
             <Slider
-              label="Inflation Rate (p.a.)"
+              label="Inflation Rate (P.A.)"
               min={1}
               max={25}
               step={0.5}
@@ -108,8 +114,8 @@ export const InflationCalculator: React.FC = () => {
               label="Duration"
               min={1}
               max={45}
-              value={years}
-              onChange={setYears}
+              value={durationYears}
+              onChange={setDurationYears}
               suffixSymbol=" Yrs"
             />
 
@@ -118,13 +124,21 @@ export const InflationCalculator: React.FC = () => {
                 <CustomInput
                   label="Plan Name"
                   value={planName}
-                  onChange={e => setPlanName(e.target.value)}
+                  onChange={(e) => setPlanName(e.target.value)}
                 />
-                <CustomButton onClick={handleSave} variant="secondary" size="sm" fullWidth className="gap-2">
-                  <Save className="w-4 h-4" /> {savingPlan ? 'Saving...' : 'Save Inflation Calculation'}
+                <CustomButton
+                  onClick={handleSave}
+                  variant="secondary"
+                  size="sm"
+                  fullWidth
+                  className="gap-2"
+                >
+                  <Save className="w-4 h-4" /> {savingPlan ? 'Saving...' : 'Save Inflation Plan'}
                 </CustomButton>
                 {saveSuccess && (
-                  <p className="text-[10px] text-emerald-500 font-bold text-center">{saveSuccess}</p>
+                  <p className="text-[10px] text-emerald-500 font-bold text-center">
+                    {saveSuccess}
+                  </p>
                 )}
               </div>
             ) : (
@@ -144,21 +158,29 @@ export const InflationCalculator: React.FC = () => {
         <div className="lg:col-span-2 space-y-6">
           {result && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              <GlassCard className="text-center p-5 bg-gradient-to-b from-slate-100/50 dark:from-slate-900/30">
-                <span className="text-[10px] font-bold text-slate-400">CURRENT COST</span>
-                <p className="text-xl font-black mt-1 text-slate-850 dark:text-slate-100">
+              <GlassCard className="text-center p-5 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  CURRENT COST
+                </span>
+                <p className="text-xl font-black mt-1 text-slate-900 dark:text-white">
                   {formatCurrency(currentCost, currency)}
                 </p>
               </GlassCard>
-              <GlassCard className="text-center p-5 bg-gradient-to-b from-red-500/5 dark:from-red-950/15 border border-red-500/10">
-                <span className="text-[10px] font-bold text-red-500">LOSS OF POWER</span>
-                <p className="text-xl font-black mt-1 text-red-500">
+
+              <GlassCard className="text-center p-5 bg-red-50/50 dark:bg-red-950/20 border border-red-500/20">
+                <span className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">
+                  LOSS OF POWER
+                </span>
+                <p className="text-xl font-black mt-1 text-red-600 dark:text-red-400">
                   {formatCurrency(result.purchasingPowerLoss, currency)}
                 </p>
               </GlassCard>
-              <GlassCard className="text-center p-5 bg-gradient-to-b from-emerald-950/10 dark:from-emerald-950/20 border border-emerald-500/10">
-                <span className="text-[10px] font-bold text-emerald-500 font-bold">FUTURE COST</span>
-                <p className="text-xl font-black mt-1 text-slate-850 dark:text-emerald-400">
+
+              <GlassCard className="text-center p-5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-500/20">
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                  FUTURE COST
+                </span>
+                <p className="text-xl font-black mt-1 text-slate-900 dark:text-emerald-400">
                   {formatCurrency(result.futureCost, currency)}
                 </p>
               </GlassCard>
@@ -167,7 +189,9 @@ export const InflationCalculator: React.FC = () => {
 
           {result && (
             <GlassCard className="border border-slate-200/50 dark:border-slate-800/40">
-              <h3 className="text-sm font-bold mb-6 text-slate-400 uppercase tracking-wider">Inflation Loss of Value</h3>
+              <h3 className="text-sm font-bold mb-6 text-slate-400 uppercase tracking-wider">
+                Inflation Loss of Value
+              </h3>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={result.chartData}>
@@ -186,7 +210,7 @@ export const InflationCalculator: React.FC = () => {
                       stroke="#94a3b8"
                       fontSize={11}
                       tickLine={false}
-                      tickFormatter={value => `${value / 1000}k`}
+                      tickFormatter={(val) => `${val / 1000}k`}
                     />
                     <Tooltip
                       contentStyle={{
@@ -199,8 +223,8 @@ export const InflationCalculator: React.FC = () => {
                     />
                     <Area
                       type="monotone"
-                      dataKey="futureValue"
-                      name="Future Cost of Item"
+                      dataKey="futureCost"
+                      name="Future Cost of Goods"
                       stroke="#ef4444"
                       strokeWidth={2}
                       fillOpacity={1}
@@ -208,8 +232,8 @@ export const InflationCalculator: React.FC = () => {
                     />
                     <Area
                       type="monotone"
-                      dataKey="totalInvested"
-                      name="Value of Original Cash (Purchasing Power)"
+                      dataKey="purchasingPower"
+                      name="Purchasing Power"
                       stroke="#3b82f6"
                       strokeWidth={1.5}
                       fillOpacity={1}

@@ -11,136 +11,6 @@ import {
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
-const DEFAULT_SAMPLE_ASSETS: AssetItem[] = [
-  {
-    id: 'sample-asset-1',
-    name: 'Main Bank Savings',
-    category: 'cash_bank',
-    currentValue: 150000,
-    purchaseValue: 150000,
-    currency: 'USD',
-    notes: 'Emergency liquidity & checking',
-  },
-  {
-    id: 'sample-asset-2',
-    name: 'US Tech Index & Blue Chips',
-    category: 'stocks',
-    currentValue: 450000,
-    purchaseValue: 350000,
-    purchaseDate: '2024-01-15',
-    quantity: '120 shares',
-    currency: 'USD',
-    notes: 'Broad market equities portfolio',
-  },
-  {
-    id: 'sample-asset-3',
-    name: 'Global Diversified Index ETF',
-    category: 'mutual_funds',
-    currentValue: 300000,
-    purchaseValue: 240000,
-    purchaseDate: '2023-06-10',
-    quantity: '250 units',
-    currency: 'USD',
-    notes: 'Long-term retirement compounding',
-  },
-  {
-    id: 'sample-asset-4',
-    name: '24K Physical Gold Bar',
-    category: 'gold',
-    currentValue: 200000,
-    purchaseValue: 160000,
-    purchaseDate: '2022-11-20',
-    quantity: '50 grams',
-    currency: 'USD',
-    notes: 'Hedge against currency depreciation',
-  },
-  {
-    id: 'sample-asset-5',
-    name: 'Residential Apartment',
-    category: 'real_estate',
-    currentValue: 1200000,
-    purchaseValue: 950000,
-    purchaseDate: '2021-04-01',
-    currency: 'USD',
-    notes: 'Primary residential property',
-  },
-  {
-    id: 'sample-asset-6',
-    name: 'Bitcoin Cold Storage',
-    category: 'bitcoin',
-    currentValue: 100000,
-    purchaseValue: 60000,
-    purchaseDate: '2023-01-10',
-    quantity: '1.2 BTC',
-    currency: 'USD',
-    notes: 'Long-term asymmetric store of value',
-  },
-];
-
-const DEFAULT_SAMPLE_LIABILITIES: LiabilityItem[] = [
-  {
-    id: 'sample-liab-1',
-    name: 'Primary Home Mortgage',
-    category: 'home_loan',
-    outstandingAmount: 650000,
-    originalAmount: 800000,
-    interestRate: 6.5,
-    emi: 4200,
-    remainingTenureMonths: 180,
-    currency: 'USD',
-    notes: '15-year fixed mortgage',
-  },
-  {
-    id: 'sample-liab-2',
-    name: 'Premium Rewards Card',
-    category: 'credit_card',
-    outstandingAmount: 25000,
-    interestRate: 18.0,
-    emi: 1200,
-    currency: 'USD',
-    notes: 'Paid off monthly',
-  },
-  {
-    id: 'sample-liab-3',
-    name: 'Electric Vehicle Financing',
-    category: 'vehicle_loan',
-    outstandingAmount: 45000,
-    originalAmount: 60000,
-    interestRate: 5.2,
-    emi: 850,
-    remainingTenureMonths: 36,
-    currency: 'USD',
-    notes: 'Auto loan balance',
-  },
-];
-
-const DEFAULT_SAMPLE_SNAPSHOTS: NetWorthSnapshot[] = [
-  {
-    id: 'snap-1',
-    date: 'Jan 2026',
-    totalAssets: 2100000,
-    totalLiabilities: 780000,
-    netWorth: 1320000,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'snap-2',
-    date: 'Apr 2026',
-    totalAssets: 2280000,
-    totalLiabilities: 750000,
-    netWorth: 1530000,
-    createdAt: '2026-04-01T00:00:00.000Z',
-  },
-  {
-    id: 'snap-3',
-    date: 'Aug 2026',
-    totalAssets: 2400000,
-    totalLiabilities: 720000,
-    netWorth: 1680000,
-    createdAt: '2026-08-01T00:00:00.000Z',
-  },
-];
-
 export function useNetWorth() {
   const { user, session } = useAuth();
   const { currency } = useCurrency();
@@ -151,13 +21,13 @@ export function useNetWorth() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Storage keys scoped to user
+  // Storage keys scoped to user ID (never shared across users)
   const storageKeyPrefix = user ? `finwise-user-${user.id}` : 'finwise-guest';
   const assetsKey = `${storageKeyPrefix}-assets`;
   const liabsKey = `${storageKeyPrefix}-liabilities`;
   const snapsKey = `${storageKeyPrefix}-snapshots`;
 
-  // Fetch / restore all data
+  // Fetch / restore all data for the authenticated user
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -179,40 +49,28 @@ export function useNetWorth() {
             snapsRes.json(),
           ]);
 
-          if (assetsData.length === 0 && liabsData.length === 0) {
-            setAssets(DEFAULT_SAMPLE_ASSETS);
-            setLiabilities(DEFAULT_SAMPLE_LIABILITIES);
-            setSnapshots(DEFAULT_SAMPLE_SNAPSHOTS);
-          } else {
-            setAssets(assetsData);
-            setLiabilities(liabsData);
-            setSnapshots(snapsData);
-          }
+          setAssets(Array.isArray(assetsData) ? assetsData : []);
+          setLiabilities(Array.isArray(liabsData) ? liabsData : []);
+          setSnapshots(Array.isArray(snapsData) ? snapsData : []);
           setLoading(false);
           return;
         }
       }
 
-      // LocalStorage fallback
+      // Scoped LocalStorage fallback (user-specific or guest-specific)
       const savedAssets = localStorage.getItem(assetsKey);
       const savedLiabs = localStorage.getItem(liabsKey);
       const savedSnaps = localStorage.getItem(snapsKey);
 
-      if (savedAssets || savedLiabs) {
-        setAssets(savedAssets ? JSON.parse(savedAssets) : []);
-        setLiabilities(savedLiabs ? JSON.parse(savedLiabs) : []);
-        setSnapshots(savedSnaps ? JSON.parse(savedSnaps) : DEFAULT_SAMPLE_SNAPSHOTS);
-      } else {
-        setAssets(DEFAULT_SAMPLE_ASSETS);
-        setLiabilities(DEFAULT_SAMPLE_LIABILITIES);
-        setSnapshots(DEFAULT_SAMPLE_SNAPSHOTS);
-      }
+      setAssets(savedAssets ? JSON.parse(savedAssets) : []);
+      setLiabilities(savedLiabs ? JSON.parse(savedLiabs) : []);
+      setSnapshots(savedSnaps ? JSON.parse(savedSnaps) : []);
     } catch (err) {
       console.error('Failed to fetch net worth data:', err);
-      setError('Unable to load wealth data. Using local cache.');
-      setAssets(DEFAULT_SAMPLE_ASSETS);
-      setLiabilities(DEFAULT_SAMPLE_LIABILITIES);
-      setSnapshots(DEFAULT_SAMPLE_SNAPSHOTS);
+      setError('Unable to load wealth data.');
+      setAssets([]);
+      setLiabilities([]);
+      setSnapshots([]);
     } finally {
       setLoading(false);
     }

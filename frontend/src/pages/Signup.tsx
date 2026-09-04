@@ -48,7 +48,7 @@ export const Signup: React.FC = () => {
           <button
             type="button"
             onClick={handleGoogleLogin}
-            className="w-full py-3 px-4 flex items-center justify-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-sm hover:bg-slate-50 dark:hover:bg-slate-700/80 transition-all duration-200 shadow-sm hover:shadow mb-5"
+            className="w-full py-3 px-4 flex items-center justify-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-semibold text-sm hover:bg-slate-50 dark:hover:bg-slate-700/80 transition-all duration-200 shadow-sm hover:shadow mb-5"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path
