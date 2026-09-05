@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api import auth, calculations, ai_ready, currency, net_worth
+from app.api import auth, calculations, ai_ready, currency, net_worth, investments
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -22,6 +22,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(calculations.router, prefix=settings.API_V1_STR)
 app.include_router(net_worth.router, prefix=settings.API_V1_STR)
+app.include_router(investments.router, prefix=settings.API_V1_STR)
 app.include_router(ai_ready.router, prefix=settings.API_V1_STR)
 app.include_router(currency.router, prefix=settings.API_V1_STR)
 

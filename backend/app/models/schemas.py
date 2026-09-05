@@ -205,3 +205,83 @@ class NetWorthSummaryResponse(BaseModel):
     diversificationScore: DiversificationScoreDetail
     currency: str
 
+# Investment Schemas (Phase 4A)
+class HoldingBase(BaseModel):
+    symbol: str = Field(..., min_length=1, max_length=30, description="Ticker or symbol e.g. AAPL, INFY, BTC")
+    name: str = Field(..., min_length=1, max_length=150, description="Instrument name e.g. Apple Inc.")
+    assetType: str = Field(..., description="Category taxonomy e.g. stock, mutual_fund, etf, bond, crypto, reit, other")
+    currency: str = Field(default="USD", description="Instrument native currency")
+    brokerCode: str = Field(default="MANUAL", description="Broker or data source tag")
+    externalHoldingId: Optional[str] = Field(None, description="External broker holding reference")
+    currentPrice: float = Field(default=0.0, ge=0, description="Latest market price per unit")
+    notes: Optional[str] = Field(None, max_length=500, description="Optional notes")
+
+class HoldingCreate(HoldingBase):
+    initialQuantity: Optional[float] = Field(None, ge=0, description="Optional initial quantity to record as first BUY")
+    initialPrice: Optional[float] = Field(None, ge=0, description="Optional initial purchase price per unit")
+
+class HoldingUpdate(BaseModel):
+    symbol: Optional[str] = Field(None, min_length=1, max_length=30)
+    name: Optional[str] = Field(None, min_length=1, max_length=150)
+    assetType: Optional[str] = None
+    currency: Optional[str] = None
+    brokerCode: Optional[str] = None
+    currentPrice: Optional[float] = Field(None, ge=0)
+    status: Optional[str] = Field(None, description="Lifecycle status: active, closed, archived")
+    notes: Optional[str] = Field(None, max_length=500)
+
+class HoldingResponse(HoldingBase):
+    id: str
+    userId: str
+    unitsHeld: float = 0.0
+    averageBuyPrice: float = 0.0
+    status: str = "active"
+    costBasis: float = 0.0
+    currentValue: float = 0.0
+    unrealizedPnL: float = 0.0
+    unrealizedPnLPercent: float = 0.0
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+class TransactionBase(BaseModel):
+    holdingId: str = Field(..., description="Parent holding ID")
+    transactionType: str = Field(..., description="Event type: BUY, SELL, DIVIDEND, FEE, SPLIT, TRANSFER_IN, TRANSFER_OUT")
+    quantity: float = Field(default=0.0, ge=0, description="Quantity/units involved")
+    price: float = Field(default=0.0, ge=0, description="Price per unit or split ratio")
+    amount: float = Field(default=0.0, description="Gross amount")
+    fees: float = Field(default=0.0, ge=0, description="Fees, STT, commission")
+    currency: str = Field(default="USD", description="Instrument currency")
+    transactionDate: datetime = Field(..., description="Transaction execution timestamp")
+    externalTransactionId: Optional[str] = Field(None, description="Broker trade ID for deduplication")
+    notes: Optional[str] = Field(None, max_length=500, description="Optional notes")
+
+class TransactionCreate(TransactionBase):
+    pass
+
+class TransactionResponse(TransactionBase):
+    id: str
+    userId: str
+    createdAt: datetime
+    realizedPnL: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+class AssetAllocationItem(BaseModel):
+    assetType: str
+    valueBase: float
+    percentage: float
+
+class InvestmentSummaryResponse(BaseModel):
+    totalValueBase: float
+    totalCostBasisBase: float
+    totalUnrealizedPnLBase: float
+    unrealizedPnLPercent: float
+    holdingCount: int
+    userCurrency: str
+    allocationByAssetType: list[AssetAllocationItem]
+
+
