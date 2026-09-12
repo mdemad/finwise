@@ -98,7 +98,7 @@ export const FinancialGoals: React.FC = () => {
 
   const filteredGoals = filterStatus === 'all' ? goals : goals.filter(g => g.status === filterStatus);
 
-  if (loading && goals.length === 0) {
+  if (loading && !error && goals.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[500px]">
         <div className="flex flex-col items-center gap-3">
@@ -123,7 +123,7 @@ export const FinancialGoals: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => refresh()} className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+          <button onClick={() => refresh()} className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer" title="Refresh Goals">
             <RefreshCw className="w-4 h-4" />
           </button>
           <CustomButton variant="primary" size="sm" onClick={handleOpenCreate} className="gap-1.5">
@@ -133,8 +133,12 @@ export const FinancialGoals: React.FC = () => {
       </div>
 
       {error && (
-        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button onClick={() => refresh()} className="underline font-bold cursor-pointer ml-4">Retry</button>
         </div>
       )}
 

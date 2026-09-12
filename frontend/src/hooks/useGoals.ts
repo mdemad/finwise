@@ -4,6 +4,7 @@ import { useCurrency } from '../context/CurrencyContext';
 import { Goal, GoalCreate, GoalUpdate, GoalsSummary } from '../types/goals';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
+const FETCH_TIMEOUT_MS = 25000;
 
 export function useGoals() {
   const { user, session } = useAuth();
@@ -18,30 +19,46 @@ export function useGoals() {
     if (!user) {
       setGoals([]);
       setSummary(null);
+      setError(null);
       setLoading(false);
       return;
     }
 
+    setLoading(true);
+    setError(null);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
     try {
-      setLoading(true);
       const token = session?.access_token;
       const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
       const [goalsRes, summaryRes] = await Promise.all([
-        fetch(`${API_URL}/api/goals`, { headers }),
-        fetch(`${API_URL}/api/goals/summary`, { headers })
+        fetch(`${API_URL}/api/goals`, { headers, signal: controller.signal }),
+        fetch(`${API_URL}/api/goals/summary`, { headers, signal: controller.signal })
       ]);
+
+      clearTimeout(timeoutId);
 
       if (goalsRes.ok && summaryRes.ok) {
         const goalsData = await goalsRes.json();
         const summaryData = await summaryRes.json();
-        setGoals(goalsData);
+        setGoals(Array.isArray(goalsData) ? goalsData : []);
         setSummary(summaryData);
+        setError(null);
+      } else {
+        setError("We couldn't load your goals right now. The server may be waking up. Please try again.");
       }
-    } catch (err) {
-      console.error('Failed to fetch goals:', err);
-      setError('Failed to fetch goals');
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        setError('Request timed out. The server may be waking up. Please try again.');
+      } else {
+        console.error('Failed to fetch goals:', err);
+        setError("We couldn't load your goals right now. The server may be waking up. Please try again.");
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   }, [user, session]);

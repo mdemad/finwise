@@ -93,14 +93,21 @@ export const Portfolio: React.FC = () => {
     transactions,
     summary,
     loading,
-    error,
-    refresh,
+    error: investmentsError,
+    refresh: refreshInvestments,
     createHolding,
     updateHolding,
     deleteHolding,
     recordTransaction,
   } = useInvestments();
-  const { goals } = useGoals();
+  const { goals, error: goalsError, refresh: refreshGoals } = useGoals();
+
+  const error = investmentsError || goalsError;
+
+  const handleRefresh = () => {
+    refreshInvestments();
+    refreshGoals();
+  };
 
   // Tab State
   const [activeTab, setActiveTab] = useState<'holdings' | 'transactions' | 'analytics'>('holdings');
@@ -494,7 +501,7 @@ export const Portfolio: React.FC = () => {
   // ---------------------------------------------------------------------------
   // Render Loading & Error Banners
   // ---------------------------------------------------------------------------
-  if (loading && holdings.length === 0) {
+  if (loading && !error && holdings.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[500px] w-full">
         <div className="flex flex-col items-center gap-3">
@@ -525,7 +532,7 @@ export const Portfolio: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => refresh()}
+            onClick={handleRefresh}
             className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             title="Refresh Portfolio"
           >
@@ -559,8 +566,11 @@ export const Portfolio: React.FC = () => {
 
       {error && (
         <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => refresh()} className="underline font-bold cursor-pointer">Retry</button>
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button onClick={handleRefresh} className="underline font-bold cursor-pointer ml-4">Retry</button>
         </div>
       )}
 

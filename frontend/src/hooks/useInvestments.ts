@@ -11,6 +11,7 @@ import {
 } from '../types/investments';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
+const FETCH_TIMEOUT_MS = 25000;
 
 export function useInvestments() {
   const { user, session } = useAuth();
@@ -22,16 +23,12 @@ export function useInvestments() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // LocalStorage fallback keys scoped strictly by user.id
-  const storagePrefix = user ? `finwise-user-${user.id}` : '';
-  const holdingsKey = user ? `${storagePrefix}-holdings` : '';
-  const transactionsKey = user ? `${storagePrefix}-transactions` : '';
-
   const fetchData = useCallback(async () => {
     if (!user) {
       setHoldings([]);
       setTransactions([]);
       setSummary(null);
+      setError(null);
       setLoading(false);
       return;
     }
@@ -39,15 +36,20 @@ export function useInvestments() {
     setLoading(true);
     setError(null);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
     try {
       const token = session?.access_token;
       const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
       const [holdingsRes, txsRes, summaryRes] = await Promise.all([
-        fetch(`${API_URL}/api/investments/holdings`, { headers }),
-        fetch(`${API_URL}/api/investments/transactions`, { headers }),
-        fetch(`${API_URL}/api/investments/summary`, { headers }),
+        fetch(`${API_URL}/api/investments/holdings`, { headers, signal: controller.signal }),
+        fetch(`${API_URL}/api/investments/transactions`, { headers, signal: controller.signal }),
+        fetch(`${API_URL}/api/investments/summary`, { headers, signal: controller.signal }),
       ]);
+
+      clearTimeout(timeoutId);
 
       if (holdingsRes.ok && txsRes.ok && summaryRes.ok) {
         const [holdingsData, txsData, summaryData] = await Promise.all([
@@ -59,41 +61,25 @@ export function useInvestments() {
         setHoldings(Array.isArray(holdingsData) ? holdingsData : []);
         setTransactions(Array.isArray(txsData) ? txsData : []);
         setSummary(summaryData);
+        setError(null);
         setLoading(false);
         return;
       }
 
-      // Offline LocalStorage fallback for authenticated user
-      const savedHoldings = localStorage.getItem(holdingsKey);
-      const savedTxs = localStorage.getItem(transactionsKey);
-      const parsedHoldings: Holding[] = savedHoldings ? JSON.parse(savedHoldings) : [];
-      const parsedTxs: Transaction[] = savedTxs ? JSON.parse(savedTxs) : [];
-
-      setHoldings(parsedHoldings);
-      setTransactions(parsedTxs);
-      
-      // Calculate local summary fallback
-      const totalVal = parsedHoldings.reduce((sum, h) => sum + (h.currentValue || 0), 0);
-      const totalCost = parsedHoldings.reduce((sum, h) => sum + (h.costBasis || 0), 0);
-      const unrealized = totalVal - totalCost;
-      const pnlPct = totalCost > 0 ? (unrealized / totalCost) * 100 : 0;
-
-      setSummary({
-        totalValueBase: totalVal,
-        totalCostBasisBase: totalCost,
-        totalUnrealizedPnLBase: unrealized,
-        unrealizedPnLPercent: pnlPct,
-        holdingCount: parsedHoldings.length,
-        userCurrency: currency,
-        allocationByAssetType: [],
-      });
-    } catch (err) {
-      console.error('Failed to fetch investment data:', err);
-      setError('Unable to load investment data.');
+      // If backend responded with non-200 (e.g. 503 or 401)
+      setError("We couldn't load your investment data right now. The server may be waking up. Please try again.");
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        setError('Request timed out. The server may be waking up. Please try again.');
+      } else {
+        console.error('Failed to fetch investment data:', err);
+        setError("We couldn't load your investment data right now. The server may be waking up. Please try again.");
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
-  }, [user, session, holdingsKey, transactionsKey, currency]);
+  }, [user, session]);
 
   useEffect(() => {
     fetchData();
