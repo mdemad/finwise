@@ -61,6 +61,10 @@ function App() {
                   <Route path="/whatif" element={<WhatIfSimulator />} />
                   <Route path="/learning" element={<LearningSection />} />
 
+                  {/* Auth */}
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/signup" element={<Signup />} />
+
                   {/* Protected Portfolio & Profile */}
                   <Route path="/portfolio" element={<AuthGuard><Portfolio /></AuthGuard>} />
                   <Route path="/goals" element={<AuthGuard><FinancialGoals /></AuthGuard>} />
