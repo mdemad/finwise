@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
 import { useNetWorth } from '../hooks/useNetWorth';
+import { useGoals } from '../hooks/useGoals';
 import {
   ASSET_CATEGORIES,
   LIABILITY_CATEGORIES,
@@ -46,6 +47,7 @@ import {
   CreditCard,
   Building2,
   Percent,
+  Briefcase,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -68,6 +70,7 @@ export const NetWorthTracker: React.FC = () => {
     deleteLiability,
     recordSnapshot,
   } = useNetWorth();
+  const { goals } = useGoals();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
 
@@ -80,6 +83,7 @@ export const NetWorthTracker: React.FC = () => {
   const [assetPurchaseValue, setAssetPurchaseValue] = useState<number | ''>('');
   const [assetPurchaseDate, setAssetPurchaseDate] = useState('');
   const [assetQuantity, setAssetQuantity] = useState('');
+  const [assetGoalId, setAssetGoalId] = useState('');
   const [assetNotes, setAssetNotes] = useState('');
 
   // Modal States for Liabilities
@@ -98,17 +102,27 @@ export const NetWorthTracker: React.FC = () => {
   const [snapshotSuccess, setSnapshotSuccess] = useState('');
   const [snapshotLoading, setSnapshotLoading] = useState(false);
 
-  // Asset Filter
+  // Asset Filters
   const [assetFilterGroup, setAssetFilterGroup] = useState<string>('all');
+  const [assetFilterSource, setAssetFilterSource] = useState<'all' | 'manual' | 'portfolio'>('all');
 
   // Filtered Assets
   const filteredAssets = useMemo(() => {
-    if (assetFilterGroup === 'all') return assets;
     return assets.filter(a => {
+      const matchesSource =
+        assetFilterSource === 'all'
+          ? true
+          : assetFilterSource === 'portfolio'
+          ? a.isAutoSynced || a.source === 'portfolio'
+          : !(a.isAutoSynced || a.source === 'portfolio');
+
+      if (!matchesSource) return false;
+      if (assetFilterGroup === 'all') return true;
+
       const cfg = ASSET_CATEGORIES[a.category] || ASSET_CATEGORIES.custom;
       return cfg.group === assetFilterGroup;
     });
-  }, [assets, assetFilterGroup]);
+  }, [assets, assetFilterGroup, assetFilterSource]);
 
   // Open Add Asset Modal
   const handleOpenAddAsset = () => {
@@ -119,6 +133,7 @@ export const NetWorthTracker: React.FC = () => {
     setAssetPurchaseValue('');
     setAssetPurchaseDate('');
     setAssetQuantity('');
+    setAssetGoalId('');
     setAssetNotes('');
     setAssetModalOpen(true);
   };
@@ -132,6 +147,7 @@ export const NetWorthTracker: React.FC = () => {
     setAssetPurchaseValue(asset.purchaseValue !== undefined ? asset.purchaseValue : '');
     setAssetPurchaseDate(asset.purchaseDate || '');
     setAssetQuantity(asset.quantity || '');
+    setAssetGoalId(asset.goalId || '');
     setAssetNotes(asset.notes || '');
     setAssetModalOpen(true);
   };
@@ -148,6 +164,7 @@ export const NetWorthTracker: React.FC = () => {
       purchaseValue: assetPurchaseValue !== '' ? Number(assetPurchaseValue) : undefined,
       purchaseDate: assetPurchaseDate || undefined,
       quantity: assetQuantity.trim() || undefined,
+      goalId: assetGoalId || undefined,
       currency: currency,
       notes: assetNotes.trim() || undefined,
     };
@@ -756,27 +773,53 @@ export const NetWorthTracker: React.FC = () => {
       {activeTab === 'assets' && (
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            {/* Filter by macro group */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <span className="text-xs font-bold text-slate-400 flex-shrink-0">Filter:</span>
-              <button
-                onClick={() => setAssetFilterGroup('all')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
-                  assetFilterGroup === 'all'
-                    ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                All ({assets.length})
-              </button>
+            {/* Filter by macro group and source */}
+            <div className="flex flex-wrap items-center gap-2 pb-1">
+              <div className="flex items-center gap-1 bg-slate-200/60 dark:bg-slate-800/60 p-1 rounded-xl">
+                <button
+                  onClick={() => setAssetFilterSource('all')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    assetFilterSource === 'all'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  All ({assets.length})
+                </button>
+                <button
+                  onClick={() => setAssetFilterSource('manual')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    assetFilterSource === 'manual'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Manual ({assets.filter(a => !a.isAutoSynced && a.source !== 'portfolio').length})
+                </button>
+                <button
+                  onClick={() => setAssetFilterSource('portfolio')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 ${
+                    assetFilterSource === 'portfolio'
+                      ? 'bg-emerald-500 text-white shadow-sm'
+                      : 'text-emerald-600 dark:text-emerald-400 hover:opacity-80'
+                  }`}
+                >
+                  <Briefcase className="w-3 h-3" />
+                  Portfolio ({assets.filter(a => a.isAutoSynced || a.source === 'portfolio').length})
+                </button>
+              </div>
+
+              <div className="h-4 w-[1px] bg-slate-300 dark:bg-slate-700 hidden sm:block mx-1" />
+
+              {/* Group filters */}
               {Object.values(MACRO_GROUPS).map(g => (
                 <button
                   key={g.id}
-                  onClick={() => setAssetFilterGroup(g.id)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                  onClick={() => setAssetFilterGroup(assetFilterGroup === g.id ? 'all' : g.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap border ${
                     assetFilterGroup === g.id
-                      ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 border-transparent'
+                      : 'bg-slate-100 dark:bg-slate-800/80 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
                   }`}
                 >
                   {g.name}
@@ -795,23 +838,32 @@ export const NetWorthTracker: React.FC = () => {
               <Coins className="w-12 h-12 text-slate-400 mx-auto mb-3 opacity-60" />
               <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">No assets found</h3>
               <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                {assetFilterGroup === 'all'
-                  ? 'Add your first asset across cash, stocks, gold, land, or crypto to begin tracking.'
-                  : 'No assets match this category filter.'}
+                {assetFilterSource === 'portfolio'
+                  ? 'No portfolio holdings found. Create stock, crypto, ETF or mutual fund investments in Portfolio.'
+                  : 'Add your manual assets across cash, real estate, gold, or vehicles to begin tracking.'}
               </p>
-              <CustomButton onClick={handleOpenAddAsset} variant="primary" size="sm" className="mt-4 gap-1.5">
-                <Plus className="w-4 h-4" /> Add Asset Now
-              </CustomButton>
+              {assetFilterSource === 'portfolio' ? (
+                <Link to="/portfolio" className="inline-block mt-4">
+                  <CustomButton variant="primary" size="sm" className="gap-1.5">
+                    <Briefcase className="w-4 h-4" /> Go to Portfolio
+                  </CustomButton>
+                </Link>
+              ) : (
+                <CustomButton onClick={handleOpenAddAsset} variant="primary" size="sm" className="mt-4 gap-1.5">
+                  <Plus className="w-4 h-4" /> Add Asset Now
+                </CustomButton>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredAssets.map(asset => {
                 const catCfg = ASSET_CATEGORIES[asset.category] || ASSET_CATEGORIES.custom;
+                const isSynced = asset.isAutoSynced || asset.source === 'portfolio';
                 const hasPurch = asset.purchaseValue !== undefined && asset.purchaseValue > 0;
-                const gainLoss = hasPurch ? asset.currentValue - (asset.purchaseValue || 0) : 0;
-                const gainLossPct = hasPurch
-                  ? ((asset.currentValue - (asset.purchaseValue || 0)) / (asset.purchaseValue || 1)) * 100
-                  : 0;
+                const gainLoss = asset.gainLoss !== undefined ? asset.gainLoss : (hasPurch ? asset.currentValue - (asset.purchaseValue || 0) : 0);
+                const gainLossPct = asset.gainLossPercent !== undefined
+                  ? asset.gainLossPercent
+                  : (hasPurch ? ((asset.currentValue - (asset.purchaseValue || 0)) / (asset.purchaseValue || 1)) * 100 : 0);
 
                 return (
                   <GlassCard
@@ -830,22 +882,39 @@ export const NetWorthTracker: React.FC = () => {
                           <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                             {catCfg.name}
                           </span>
+                          {isSynced && (
+                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                              <Briefcase className="w-2.5 h-2.5" />
+                              Portfolio Synced
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => handleOpenEditAsset(asset)}
-                            className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors cursor-pointer"
-                            title="Edit Asset"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => deleteAsset(asset.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
-                            title="Delete Asset"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {isSynced ? (
+                            <Link
+                              to="/portfolio"
+                              className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline px-2 py-1 rounded bg-emerald-500/10"
+                            >
+                              Trade
+                            </Link>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleOpenEditAsset(asset)}
+                                className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors cursor-pointer"
+                                title="Edit Asset"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => deleteAsset(asset.id)}
+                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                                title="Delete Asset"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -879,7 +948,7 @@ export const NetWorthTracker: React.FC = () => {
                       {hasPurch && (
                         <div className="flex justify-between items-center text-xs">
                           <span className="text-slate-400">
-                            Purchased: {formatCurrency(asset.purchaseValue || 0, currency)}
+                            Cost: {formatCurrency(asset.purchaseValue || 0, currency)}
                           </span>
                           <span
                             className={`font-black flex items-center gap-0.5 ${
@@ -1232,6 +1301,23 @@ export const NetWorthTracker: React.FC = () => {
                 value={assetQuantity}
                 onChange={e => setAssetQuantity(e.target.value)}
               />
+
+              {/* Goal */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Linked Goal (Optional)
+                </label>
+                <select
+                  value={assetGoalId}
+                  onChange={e => setAssetGoalId(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-sm font-semibold focus:border-emerald-500 focus:outline-none cursor-pointer bg-white dark:bg-slate-900"
+                >
+                  <option value="">-- No Goal --</option>
+                  {goals.map(g => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+              </div>
 
               {/* Notes */}
               <div className="flex flex-col gap-1.5">

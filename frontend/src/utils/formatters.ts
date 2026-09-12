@@ -72,14 +72,15 @@ export function getCurrencySymbol(code: CurrencyCode): string {
  * e.g. formatCurrency(1000, 'INR') → '₹1,000'   (not USD→INR converted)
  *      formatCurrency(1000, 'USD') → '$1,000'
  */
-export function formatCurrency(value: number, currencyCode: CurrencyCode = 'USD'): string {
-  const config = currencies[currencyCode];
+export function formatCurrency(value: number, currencyCode: CurrencyCode | string = 'USD'): string {
+  const code = (currencyCode as CurrencyCode) || 'USD';
+  const config = currencies[code] || currencies.USD;
   if (!config) return `${value}`;
 
   try {
     return new Intl.NumberFormat(config.locale, {
       style: 'currency',
-      currency: currencyCode,
+      currency: config.code,
       maximumFractionDigits: config.decimals,
       minimumFractionDigits: 0,
     }).format(value);

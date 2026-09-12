@@ -73,6 +73,10 @@ class AssetBase(BaseModel):
     quantity: Optional[str] = Field(None, description="Quantity/units e.g. 50g, 10 units")
     currency: str = Field(default="USD", description="Currency denomination")
     notes: Optional[str] = Field(None, max_length=500, description="Optional user notes")
+    isAutoSynced: bool = Field(default=False, description="Whether asset is auto-synced from portfolio")
+    source: Optional[str] = Field(default="manual", description="Source of asset: manual or portfolio")
+    linkedHoldingId: Optional[str] = Field(None, description="Optional linked investment holding ID")
+    goalId: Optional[str] = Field(None, description="Optional linked financial goal ID")
 
 class AssetCreate(AssetBase):
     pass
@@ -86,6 +90,10 @@ class AssetUpdate(BaseModel):
     quantity: Optional[str] = None
     currency: Optional[str] = None
     notes: Optional[str] = Field(None, max_length=500)
+    isAutoSynced: Optional[bool] = None
+    source: Optional[str] = None
+    linkedHoldingId: Optional[str] = None
+    goalId: Optional[str] = None
 
 class AssetResponse(AssetBase):
     id: str
@@ -204,6 +212,9 @@ class NetWorthSummaryResponse(BaseModel):
     concentration: ConcentrationInsight
     diversificationScore: DiversificationScoreDetail
     currency: str
+    portfolioValue: float = 0.0
+    portfolioAssetCount: int = 0
+    manualAssetCount: int = 0
 
 # Investment Schemas (Phase 4A)
 class HoldingBase(BaseModel):
@@ -214,6 +225,7 @@ class HoldingBase(BaseModel):
     brokerCode: str = Field(default="MANUAL", description="Broker or data source tag")
     externalHoldingId: Optional[str] = Field(None, description="External broker holding reference")
     currentPrice: float = Field(default=0.0, ge=0, description="Latest market price per unit")
+    goalId: Optional[str] = Field(None, description="Optional linked financial goal ID")
     notes: Optional[str] = Field(None, max_length=500, description="Optional notes")
 
 class HoldingCreate(HoldingBase):
@@ -228,6 +240,7 @@ class HoldingUpdate(BaseModel):
     brokerCode: Optional[str] = None
     currentPrice: Optional[float] = Field(None, ge=0)
     status: Optional[str] = Field(None, description="Lifecycle status: active, closed, archived")
+    goalId: Optional[str] = None
     notes: Optional[str] = Field(None, max_length=500)
 
 class HoldingResponse(HoldingBase):
@@ -284,4 +297,36 @@ class InvestmentSummaryResponse(BaseModel):
     userCurrency: str
     allocationByAssetType: list[AssetAllocationItem]
 
+# Goal Schemas (Phase 4D)
+class GoalBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=150, description="Goal name e.g. Dream Home")
+    targetAmount: float = Field(..., ge=0, description="Target savings or portfolio amount")
+    targetDate: str = Field(..., description="Target completion date YYYY-MM-DD")
+    currency: str = Field(default="USD", description="Goal currency")
+    status: str = Field(default="in_progress", description="Lifecycle: in_progress, achieved, abandoned")
+    notes: Optional[str] = Field(None, max_length=500, description="Optional notes")
 
+class GoalCreate(GoalBase):
+    pass
+
+class GoalUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=150)
+    targetAmount: Optional[float] = Field(None, ge=0)
+    targetDate: Optional[str] = None
+    currency: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = Field(None, max_length=500)
+
+class GoalResponse(GoalBase):
+    id: str
+    userId: str
+    currentValue: float = 0.0
+    progressPercent: float = 0.0
+    amountRemaining: float = 0.0
+    daysRemaining: int = 0
+    overdue: bool = False
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True

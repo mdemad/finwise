@@ -322,6 +322,12 @@ export interface AssetItem {
   quantity?: string;
   currency: CurrencyCode;
   notes?: string;
+  isAutoSynced?: boolean;
+  source?: 'manual' | 'portfolio' | string;
+  linkedHoldingId?: string;
+  goalId?: string;
+  gainLoss?: number;
+  gainLossPercent?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -417,6 +423,9 @@ export interface WealthSummary {
   concentrationMessage: string;
   isConcentrated: boolean;
   diversificationScore: DiversificationScore;
+  portfolioValue?: number;
+  portfolioAssetCount?: number;
+  manualAssetCount?: number;
 }
 
 /**

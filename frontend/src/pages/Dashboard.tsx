@@ -102,14 +102,15 @@ export const Dashboard: React.FC = () => {
       inflationCorpus: computedInflation,
       dashboardChartData: chartData,
     };
-  }, [calculations]);
+  }, [calculations, netWorthSummary.netWorth]);
 
   const quickActions = [
+    { name: 'Portfolio Tracker', path: '/portfolio', desc: 'Stocks, crypto, mutual funds & WAC analytics' },
+    { name: 'Net Worth Tracker', path: '/networth', desc: 'Consolidated wealth, debt ratios & liquidity' },
+    { name: 'Goal Planner', path: '/goal', desc: 'Link portfolios to custom life goals' },
     { name: 'SIP Calculator', path: '/sip', desc: 'Calculate regular systematic wealth' },
     { name: 'Currency Depreciation', path: '/currency', desc: 'Live FX rates & historical currency analysis' },
     { name: 'Retirement Planner', path: '/retirement', desc: 'Estimate retirement corpus needs' },
-    { name: 'Goal Planner', path: '/goal', desc: 'Calculate savings for custom life goals' },
-    { name: 'Scenario Compare', path: '/scenario', desc: 'Compare multi-asset strategies' },
   ];
 
   return (

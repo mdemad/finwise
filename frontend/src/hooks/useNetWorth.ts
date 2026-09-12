@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCurrency } from '../context/CurrencyContext';
+import { CurrencyCode } from '../utils/formatters';
 import {
   AssetItem,
   LiabilityItem,
@@ -86,10 +87,54 @@ export function useNetWorth() {
       const savedAssets = localStorage.getItem(assetsKey);
       const savedLiabs = localStorage.getItem(liabsKey);
       const savedSnaps = localStorage.getItem(snapsKey);
+      const savedHoldings = localStorage.getItem(`${storageKeyPrefix}-holdings`);
 
-      setAssets(savedAssets ? JSON.parse(savedAssets) : []);
-      setLiabilities(savedLiabs ? JSON.parse(savedLiabs) : []);
-      setSnapshots(savedSnaps ? JSON.parse(savedSnaps) : []);
+      const parsedAssets: AssetItem[] = savedAssets ? JSON.parse(savedAssets) : [];
+      const parsedLiabs: LiabilityItem[] = savedLiabs ? JSON.parse(savedLiabs) : [];
+      const parsedSnaps: NetWorthSnapshot[] = savedSnaps ? JSON.parse(savedSnaps) : [];
+      const parsedHoldings = savedHoldings ? JSON.parse(savedHoldings) : [];
+
+      const linkedIds = new Set(parsedAssets.map((a) => a.linkedHoldingId).filter(Boolean));
+      const syncedHoldingAssets: AssetItem[] = [];
+
+      const HOLDING_TO_ASSET_CATEGORY: Record<string, string> = {
+        stock: 'stocks',
+        mutual_fund: 'mutual_funds',
+        etf: 'mutual_funds',
+        bond: 'bonds',
+        crypto: 'crypto',
+        reit: 'real_estate',
+        other: 'other',
+      };
+
+      for (const h of parsedHoldings) {
+        if (!linkedIds.has(h.id) && (h.status === 'active' || !h.status) && (h.unitsHeld || 0) > 0) {
+          const val = (h.unitsHeld || 0) * (h.currentPrice || 0);
+          const cost = (h.unitsHeld || 0) * (h.averageBuyPrice || 0);
+          const pnl = val - cost;
+          const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
+          syncedHoldingAssets.push({
+            id: `portfolio-holding-${h.id}`,
+            name: `${h.symbol} - ${h.name}`,
+            category: HOLDING_TO_ASSET_CATEGORY[h.assetType] || 'other',
+            currentValue: val,
+            purchaseValue: cost,
+            quantity: `${h.unitsHeld} units`,
+            currency: (h.currency as CurrencyCode) || currency,
+            notes: `Auto-synced from ${h.brokerCode || 'Portfolio'}`,
+            isAutoSynced: true,
+            source: 'portfolio',
+            linkedHoldingId: h.id,
+            gainLoss: pnl,
+            gainLossPercent: pnlPct,
+            createdAt: h.createdAt || new Date().toISOString(),
+          });
+        }
+      }
+
+      setAssets([...parsedAssets, ...syncedHoldingAssets]);
+      setLiabilities(parsedLiabs);
+      setSnapshots(parsedSnaps);
     } catch (err) {
       console.error('Failed to fetch net worth data:', err);
       setError('Unable to load wealth data.');

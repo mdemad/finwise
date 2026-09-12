@@ -19,6 +19,7 @@ export interface Holding {
   currentValue: number;
   unrealizedPnL: number;
   unrealizedPnLPercent: number;
+  goalId?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -34,6 +35,7 @@ export interface HoldingCreatePayload {
   currentPrice?: number;
   initialQuantity?: number;
   initialPrice?: number;
+  goalId?: string;
   notes?: string;
 }
 
@@ -45,6 +47,7 @@ export interface HoldingUpdatePayload {
   brokerCode?: string;
   currentPrice?: number;
   status?: HoldingStatus;
+  goalId?: string;
   notes?: string;
 }
 

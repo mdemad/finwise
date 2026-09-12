@@ -21,8 +21,9 @@ from app.models.wealth_config import (
     calculate_diversification_score,
 )
 from app.api.auth import get_current_user
+from app.api.investments import MOCK_HOLDINGS, LOCK as HOLDINGS_LOCK
 from app.config import settings
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 router = APIRouter(prefix="/net-worth", tags=["net_worth"])
@@ -32,14 +33,24 @@ MOCK_ASSETS: dict[str, dict] = {}
 MOCK_LIABILITIES: dict[str, dict] = {}
 MOCK_SNAPSHOTS: dict[str, dict] = {}
 
+HOLDING_TO_ASSET_CATEGORY: dict[str, str] = {
+    "stock": "stocks",
+    "mutual_fund": "mutual_funds",
+    "etf": "mutual_funds",
+    "bond": "bonds",
+    "crypto": "crypto",
+    "reit": "real_estate",
+    "other": "other",
+}
+
 
 def _enrich_asset(asset: dict) -> AssetResponse:
     curr_val = float(asset.get("currentValue", 0))
     purch_val = asset.get("purchaseValue")
-    gain_loss = None
-    gain_loss_pct = None
+    gain_loss = asset.get("gainLoss")
+    gain_loss_pct = asset.get("gainLossPercent")
 
-    if purch_val is not None and float(purch_val) > 0:
+    if gain_loss is None and purch_val is not None and float(purch_val) > 0:
         purch_val_f = float(purch_val)
         gain_loss = round(curr_val - purch_val_f, 2)
         gain_loss_pct = round(((curr_val - purch_val_f) / purch_val_f) * 100, 2)
@@ -55,7 +66,11 @@ def _enrich_asset(asset: dict) -> AssetResponse:
         quantity=asset.get("quantity"),
         currency=asset.get("currency", "USD"),
         notes=asset.get("notes"),
-        createdAt=asset.get("createdAt", datetime.utcnow()),
+        isAutoSynced=asset.get("isAutoSynced", False),
+        source=asset.get("source", "manual"),
+        linkedHoldingId=asset.get("linkedHoldingId"),
+        goalId=asset.get("goalId"),
+        createdAt=asset.get("createdAt", datetime.now(timezone.utc)),
         updatedAt=asset.get("updatedAt"),
         gainLoss=gain_loss,
         gainLossPercent=gain_loss_pct,
@@ -66,11 +81,55 @@ def _enrich_asset(asset: dict) -> AssetResponse:
 # Assets Endpoints
 # ---------------------------------------------------------------------------
 @router.get("/assets", response_model=list[AssetResponse])
-async def list_assets(current_user: dict = Depends(get_current_user)):
+async def list_assets(
+    include_portfolio: bool = Query(True, description="Include live investment holdings"),
+    current_user: dict = Depends(get_current_user),
+):
     user_id = current_user["id"]
     user_assets = [a for a in MOCK_ASSETS.values() if a["userId"] == user_id]
-    user_assets.sort(key=lambda x: x["createdAt"], reverse=True)
-    return [_enrich_asset(a) for a in user_assets]
+    result = [_enrich_asset(a) for a in user_assets]
+
+    if include_portfolio:
+        linked_ids = {a.get("linkedHoldingId") for a in user_assets if a.get("linkedHoldingId")}
+        with HOLDINGS_LOCK:
+            user_holdings = [
+                h for h in MOCK_HOLDINGS.values()
+                if h["userId"] == user_id and h.get("status", "active") == "active" and float(h.get("unitsHeld", 0)) > 0
+            ]
+
+        for h in user_holdings:
+            if h["id"] not in linked_ids:
+                units = float(h.get("unitsHeld", 0))
+                curr_price = float(h.get("currentPrice", 0))
+                avg_price = float(h.get("averageBuyPrice", 0))
+                val = round(units * curr_price, 2)
+                cost = round(units * avg_price, 2)
+                pnl = round(val - cost, 2)
+                pnl_pct = round((pnl / cost) * 100, 2) if cost > 0 else 0.0
+
+                cat = HOLDING_TO_ASSET_CATEGORY.get(h.get("assetType", "other"), "other")
+                synced_asset = {
+                    "id": f"portfolio-holding-{h['id']}",
+                    "userId": user_id,
+                    "name": f"{h['symbol']} - {h['name']}",
+                    "category": cat,
+                    "currentValue": val,
+                    "purchaseValue": cost,
+                    "quantity": f"{units} units",
+                    "currency": h.get("currency", "USD"),
+                    "notes": f"Auto-synced from {h.get('brokerCode', 'Portfolio')}",
+                    "isAutoSynced": True,
+                    "source": "portfolio",
+                    "linkedHoldingId": h["id"],
+                    "gainLoss": pnl,
+                    "gainLossPercent": pnl_pct,
+                    "createdAt": h.get("createdAt", datetime.now(timezone.utc)),
+                    "updatedAt": h.get("updatedAt", datetime.now(timezone.utc)),
+                }
+                result.append(_enrich_asset(synced_asset))
+
+    result.sort(key=lambda x: x.createdAt, reverse=True)
+    return result
 
 
 @router.post("/assets", response_model=AssetResponse, status_code=status.HTTP_201_CREATED)
@@ -80,7 +139,7 @@ async def create_asset(
 ):
     user_id = current_user["id"]
     asset_id = str(uuid.uuid4())
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # Validate category key
     cat_key = asset_in.category
@@ -98,9 +157,17 @@ async def create_asset(
         "quantity": asset_in.quantity,
         "currency": asset_in.currency or current_user.get("currency", "USD"),
         "notes": asset_in.notes,
+        "isAutoSynced": asset_in.isAutoSynced or False,
+        "source": asset_in.source or "manual",
+        "linkedHoldingId": asset_in.linkedHoldingId,
+        "goalId": asset_in.goalId,
         "createdAt": now,
         "updatedAt": now,
     }
+
+    if asset_in.goalId:
+        from app.api.goals import verify_goal_ownership_for_link
+        verify_goal_ownership_for_link(asset_in.goalId, user_id)
 
     MOCK_ASSETS[asset_id] = new_asset
 
@@ -120,6 +187,7 @@ async def create_asset(
                 "quantity": new_asset["quantity"],
                 "currency": new_asset["currency"],
                 "notes": new_asset["notes"],
+                "goal_id": new_asset.get("goalId"),
                 "created_at": now.isoformat(),
             }).execute()
         except Exception as e:
@@ -135,6 +203,12 @@ async def update_asset(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = current_user["id"]
+    if asset_id.startswith("portfolio-holding-"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Portfolio-synced assets are managed through your Investment Portfolio. Update or sell units from the Portfolio page."
+        )
+
     if asset_id not in MOCK_ASSETS:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
 
@@ -146,10 +220,14 @@ async def update_asset(
     for k, v in update_dict.items():
         if k == "category" and v not in ASSET_CATEGORIES:
             asset[k] = "custom"
+        elif k == "goalId":
+            from app.api.goals import verify_goal_ownership_for_link
+            verify_goal_ownership_for_link(v or "", user_id)
+            asset[k] = v  # allow None to unlink
         elif v is not None:
             asset[k] = v
 
-    asset["updatedAt"] = datetime.utcnow()
+    asset["updatedAt"] = datetime.now(timezone.utc)
 
     # Supabase sync
     if settings.SUPABASE_URL and settings.SUPABASE_KEY:
@@ -165,6 +243,7 @@ async def update_asset(
                 "quantity": asset.get("quantity"),
                 "currency": asset.get("currency"),
                 "notes": asset.get("notes"),
+                "goal_id": asset.get("goalId"),
                 "updated_at": asset["updatedAt"].isoformat(),
             }).eq("id", asset_id).execute()
         except Exception as e:
@@ -179,6 +258,12 @@ async def delete_asset(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = current_user["id"]
+    if asset_id.startswith("portfolio-holding-"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Portfolio-synced assets are managed through your Investment Portfolio. Delete or sell them from the Portfolio page."
+        )
+
     if asset_id not in MOCK_ASSETS:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
 
@@ -389,10 +474,43 @@ async def get_wealth_summary(current_user: dict = Depends(get_current_user)):
     user_id = current_user["id"]
     user_currency = current_user.get("currency", "USD")
 
-    user_assets = [a for a in MOCK_ASSETS.values() if a["userId"] == user_id]
+    user_manual_assets = [a for a in MOCK_ASSETS.values() if a["userId"] == user_id]
     user_liabs = [l for l in MOCK_LIABILITIES.values() if l["userId"] == user_id]
 
-    total_assets = sum(float(a["currentValue"]) for a in user_assets)
+    linked_ids = {a.get("linkedHoldingId") for a in user_manual_assets if a.get("linkedHoldingId")}
+
+    with HOLDINGS_LOCK:
+        user_holdings = [
+            h for h in MOCK_HOLDINGS.values()
+            if h["userId"] == user_id and h.get("status", "active") == "active" and float(h.get("unitsHeld", 0)) > 0
+        ]
+
+    # Synthesize active portfolio holdings that are not manually linked
+    portfolio_total = 0.0
+    synthesized_assets = []
+    for h in user_holdings:
+        units = float(h.get("unitsHeld", 0))
+        curr_price = float(h.get("currentPrice", 0))
+        val = round(units * curr_price, 2)
+        portfolio_total += val
+
+        if h["id"] not in linked_ids:
+            cat = HOLDING_TO_ASSET_CATEGORY.get(h.get("assetType", "other"), "other")
+            synthesized_assets.append({
+                "id": f"portfolio-holding-{h['id']}",
+                "userId": user_id,
+                "name": f"{h['symbol']} - {h['name']}",
+                "category": cat,
+                "currentValue": val,
+                "isAutoSynced": True,
+                "source": "portfolio",
+                "linkedHoldingId": h["id"],
+            })
+
+    # Consolidated assets list
+    all_effective_assets = user_manual_assets + synthesized_assets
+
+    total_assets = sum(float(a["currentValue"]) for a in all_effective_assets)
     total_liabilities = sum(float(l["outstandingAmount"]) for l in user_liabs)
     net_worth = total_assets - total_liabilities
     debt_to_asset = round((total_liabilities / total_assets * 100), 2) if total_assets > 0 else 0.0
@@ -403,9 +521,9 @@ async def get_wealth_summary(current_user: dict = Depends(get_current_user)):
     illiquid_total = 0.0
     group_totals: dict[str, float] = {g: 0.0 for g in MACRO_GROUPS.keys()}
 
-    for a in user_assets:
+    for a in all_effective_assets:
         cat_id = a.get("category", "custom")
-        cat_info = ASSET_CATEGORIES.get(cat_id, ASSET_CATEGORIES["custom"])
+        cat_info = ASSET_CATEGORIES.get(cat_id, ASSET_CATEGORIES.get("other", ASSET_CATEGORIES["custom"]))
         val = float(a["currentValue"])
 
         if cat_id not in category_totals:
@@ -559,7 +677,7 @@ async def get_wealth_summary(current_user: dict = Depends(get_current_user)):
         liquidPercent=liquid_pct,
         illiquidAssets=round(illiquid_total, 2),
         illiquidPercent=illiquid_pct,
-        assetCount=len(user_assets),
+        assetCount=len(all_effective_assets),
         liabilityCount=len(user_liabs),
         categoryCount=len(asset_allocation),
         assetAllocation=asset_allocation,
@@ -568,6 +686,9 @@ async def get_wealth_summary(current_user: dict = Depends(get_current_user)):
         concentration=concentration_insight,
         diversificationScore=DiversificationScoreDetail(**score_data),
         currency=user_currency,
+        portfolioValue=round(portfolio_total, 2),
+        portfolioAssetCount=len(user_holdings),
+        manualAssetCount=len(user_manual_assets),
     )
 
 

@@ -53,8 +53,8 @@ def _enrich_holding(h: dict) -> HoldingResponse:
         status=h.get("status", "active"),
         costBasis=cost_basis,
         currentValue=current_val,
-        unrealizedPnL=unrealized_pnl,
         unrealizedPnLPercent=unrealized_pnl_pct,
+        goalId=h.get("goalId"),
         notes=h.get("notes"),
         createdAt=h.get("createdAt", datetime.now(timezone.utc)),
         updatedAt=h.get("updatedAt", datetime.now(timezone.utc)),
@@ -108,10 +108,15 @@ async def create_holding(
         "averageBuyPrice": 0.0,
         "currentPrice": float(holding_in.currentPrice),
         "status": "active",
+        "goalId": holding_in.goalId,
         "notes": holding_in.notes,
         "createdAt": now,
         "updatedAt": now,
     }
+
+    if holding_in.goalId:
+        from app.api.goals import verify_goal_ownership_for_link
+        verify_goal_ownership_for_link(holding_in.goalId, user_id)
 
     with LOCK:
         MOCK_HOLDINGS[holding_id] = new_holding
@@ -161,6 +166,7 @@ async def create_holding(
                 "average_buy_price": new_holding["averageBuyPrice"],
                 "current_price": new_holding["currentPrice"],
                 "status": new_holding["status"],
+                "goal_id": new_holding.get("goalId"),
                 "notes": new_holding["notes"],
                 "created_at": now.isoformat(),
                 "updated_at": now.isoformat(),
@@ -230,6 +236,10 @@ async def update_holding(
             elif k in {"unitsHeld", "averageBuyPrice"}:
                 # Reject direct manual overrides of calculated accounting projections
                 continue
+            elif k == "goalId":
+                from app.api.goals import verify_goal_ownership_for_link
+                verify_goal_ownership_for_link(v or "", user_id)
+                holding[k] = v  # allow setting to None/empty to unlink
             elif v is not None:
                 holding[k] = v
 
@@ -247,6 +257,7 @@ async def update_holding(
                 "broker_code": holding["brokerCode"],
                 "current_price": holding["currentPrice"],
                 "status": holding["status"],
+                "goal_id": holding.get("goalId"),
                 "notes": holding.get("notes"),
                 "updated_at": now.isoformat(),
             }).eq("id", holding_id).eq("user_id", user_id).execute()

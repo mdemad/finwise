@@ -21,6 +21,8 @@ const NetWorthTracker = lazy(() => import('./pages/NetWorthTracker').then(m => (
 const ScenarioComparison = lazy(() => import('./pages/ScenarioComparison').then(m => ({ default: m.ScenarioComparison })));
 const WhatIfSimulator = lazy(() => import('./pages/WhatIfSimulator').then(m => ({ default: m.WhatIfSimulator })));
 const LearningSection = lazy(() => import('./pages/LearningSection').then(m => ({ default: m.LearningSection })));
+const Portfolio = lazy(() => import('./pages/Portfolio').then(m => ({ default: m.Portfolio })));
+const FinancialGoals = lazy(() => import('./pages/FinancialGoals').then(m => ({ default: m.FinancialGoals })));
 const Profile = lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
 const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
 const Signup = lazy(() => import('./pages/Signup').then(m => ({ default: m.Signup })));
@@ -59,19 +61,10 @@ function App() {
                   <Route path="/whatif" element={<WhatIfSimulator />} />
                   <Route path="/learning" element={<LearningSection />} />
 
-                  {/* Auth */}
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/signup" element={<Signup />} />
-
-                  {/* Protected Profile */}
-                  <Route
-                    path="/profile"
-                    element={
-                      <AuthGuard>
-                        <Profile />
-                      </AuthGuard>
-                    }
-                  />
+                  {/* Protected Portfolio & Profile */}
+                  <Route path="/portfolio" element={<AuthGuard><Portfolio /></AuthGuard>} />
+                  <Route path="/goals" element={<AuthGuard><FinancialGoals /></AuthGuard>} />
+                  <Route path="/profile" element={<AuthGuard><Profile /></AuthGuard>} />
 
                   {/* Fallback */}
                   <Route path="*" element={<Navigate to="/" replace />} />

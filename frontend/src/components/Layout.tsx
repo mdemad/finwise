@@ -26,6 +26,7 @@ import {
   X,
   Sparkles,
   ArrowLeftRight,
+  Briefcase,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -44,6 +45,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const menuItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { name: 'Portfolio', path: '/portfolio', icon: Briefcase },
+    { name: 'Financial Goals', path: '/goals', icon: Goal },
     { name: 'SIP Calculator', path: '/sip', icon: TrendingUp },
     { name: 'Lump Sum', path: '/lumpsum', icon: Coins },
     { name: 'Inflation', path: '/inflation', icon: Percent },

@@ -283,6 +283,280 @@ class TestRealSupabaseIntegration(unittest.TestCase):
         self.supabase.table("investment_transactions").delete().eq("holding_id", holding_id).execute()
         self.supabase.table("investment_holdings").delete().eq("id", holding_id).execute()
 
+    def test_real_supabase_goals_full_flow(self):
+        """Executes full Phase 4D Financial Goals flow against real Supabase DB."""
+        # 1. Inspect schema availability: confirm migration 002 has been applied
+        try:
+            self.supabase.table("financial_goals").select("id").limit(1).execute()
+        except Exception as e:
+            raise unittest.SkipTest(
+                f"Skipping real Supabase goals test: 'financial_goals' table does not exist or migration 002 has not been applied yet. Detail: {e}"
+            )
+
+        user_a_id = str(uuid.uuid4())
+        user_b_id = str(uuid.uuid4())
+        token_a = self.create_mock_jwt(user_a_id, f"usera-goal-{user_a_id[:8]}@sbtest.com", "Goal User A")
+        token_b = self.create_mock_jwt(user_b_id, f"userb-goal-{user_b_id[:8]}@sbtest.com", "Goal User B")
+
+        created_goal_ids = []
+        created_holding_ids = []
+        created_asset_ids = []
+
+        try:
+            # -------------------------------------------------------------------
+            # A. Create Financial Goal in Supabase
+            # -------------------------------------------------------------------
+            g_res = self.client.post(
+                "/api/goals",
+                json={
+                    "name": "Retirement Villa Fund",
+                    "targetAmount": 100000.0,
+                    "targetDate": "2030-12-31",
+                    "currency": "USD",
+                    "status": "in_progress",
+                    "notes": "Real Supabase Goal Test"
+                },
+                headers={"Authorization": f"Bearer {token_a}"}
+            )
+            self.assertEqual(g_res.status_code, 201, f"Goal creation failed: {g_res.text}")
+            goal_a = g_res.json()
+            goal_a_id = goal_a["id"]
+            created_goal_ids.append(goal_a_id)
+
+            # Verify directly in Supabase financial_goals table
+            sb_goal = self.supabase.table("financial_goals").select("*").eq("id", goal_a_id).execute()
+            self.assertEqual(len(sb_goal.data), 1)
+            self.assertEqual(sb_goal.data[0]["name"], "Retirement Villa Fund")
+            self.assertEqual(float(sb_goal.data[0]["target_amount"]), 100000.0)
+            self.assertEqual(sb_goal.data[0]["user_id"], user_a_id)
+
+            # -------------------------------------------------------------------
+            # B. Read Goal back from Supabase
+            # -------------------------------------------------------------------
+            get_res = self.client.get("/api/goals", headers={"Authorization": f"Bearer {token_a}"})
+            self.assertEqual(get_res.status_code, 200)
+            goals_list = get_res.json()
+            self.assertTrue(any(g["id"] == goal_a_id for g in goals_list))
+
+            # -------------------------------------------------------------------
+            # C. Update Goal and verify persistence in Supabase
+            # -------------------------------------------------------------------
+            up_res = self.client.put(
+                f"/api/goals/{goal_a_id}",
+                json={
+                    "name": "Updated Villa Fund",
+                    "targetAmount": 120000.0
+                },
+                headers={"Authorization": f"Bearer {token_a}"}
+            )
+            self.assertEqual(up_res.status_code, 200)
+            sb_up_goal = self.supabase.table("financial_goals").select("*").eq("id", goal_a_id).execute()
+            self.assertEqual(sb_up_goal.data[0]["name"], "Updated Villa Fund")
+            self.assertEqual(float(sb_up_goal.data[0]["target_amount"]), 120000.0)
+
+            # -------------------------------------------------------------------
+            # D. Create Investment Holding linked to Goal and verify Supabase goal_id
+            # -------------------------------------------------------------------
+            h_res = self.client.post(
+                "/api/investments/holdings",
+                json={
+                    "symbol": "GOALETF",
+                    "name": "Goal Linked ETF",
+                    "assetType": "etf",
+                    "currentPrice": 200.0,
+                    "currency": "USD",
+                    "goalId": goal_a_id
+                },
+                headers={"Authorization": f"Bearer {token_a}"}
+            )
+            self.assertEqual(h_res.status_code, 201)
+            holding_id = h_res.json()["id"]
+            created_holding_ids.append(holding_id)
+
+            # Verify goal_id stored in Supabase investment_holdings
+            sb_h = self.supabase.table("investment_holdings").select("*").eq("id", holding_id).execute()
+            self.assertEqual(len(sb_h.data), 1)
+            self.assertEqual(sb_h.data[0]["goal_id"], goal_a_id)
+
+            # Add BUY transaction: 10 units @ $200 = $2,000 market value
+            now_str = datetime.now(timezone.utc).isoformat()
+            tx_res = self.client.post(
+                "/api/investments/transactions",
+                json={
+                    "holdingId": holding_id,
+                    "transactionType": "BUY",
+                    "quantity": 10.0,
+                    "price": 200.0,
+                    "transactionDate": now_str
+                },
+                headers={"Authorization": f"Bearer {token_a}"}
+            )
+            self.assertEqual(tx_res.status_code, 201)
+
+            # -------------------------------------------------------------------
+            # E. Update Holding goal_id and verify persistence
+            # -------------------------------------------------------------------
+            # Unlink
+            self.client.put(
+                f"/api/investments/holdings/{holding_id}",
+                json={"goalId": None},
+                headers={"Authorization": f"Bearer {token_a}"}
+            )
+            sb_h_unlinked = self.supabase.table("investment_holdings").select("goal_id").eq("id", holding_id).execute()
+            self.assertIsNone(sb_h_unlinked.data[0]["goal_id"])
+
+            # Relink back to goal
+            self.client.put(
+                f"/api/investments/holdings/{holding_id}",
+                json={"goalId": goal_a_id},
+                headers={"Authorization": f"Bearer {token_a}"}
+            )
+            sb_h_relinked = self.supabase.table("investment_holdings").select("goal_id").eq("id", holding_id).execute()
+            self.assertEqual(sb_h_relinked.data[0]["goal_id"], goal_a_id)
+
+            # -------------------------------------------------------------------
+            # F. Create Manual User Asset linked to Goal and verify Supabase goal_id
+            # -------------------------------------------------------------------
+            a_res = self.client.post(
+                "/api/net-worth/assets",
+                json={
+                    "name": "Goal Fixed Deposit",
+                    "category": "cash",
+                    "currentValue": 8000.0,
+                    "currency": "USD",
+                    "goalId": goal_a_id
+                },
+                headers={"Authorization": f"Bearer {token_a}"}
+            )
+            self.assertEqual(a_res.status_code, 201)
+            asset_id = a_res.json()["id"]
+            created_asset_ids.append(asset_id)
+
+            sb_asset = self.supabase.table("user_assets").select("*").eq("id", asset_id).execute()
+            self.assertEqual(len(sb_asset.data), 1)
+            self.assertEqual(sb_asset.data[0]["goal_id"], goal_a_id)
+
+            # -------------------------------------------------------------------
+            # G. Verify Goal Progress using actual Supabase Data
+            # -------------------------------------------------------------------
+            # Holding value ($2,000) + Manual asset ($8,000) = $10,000 total current value
+            # Target = $120,000 -> Progress = 10,000 / 120,000 = 8.33%
+            check_goals = self.client.get("/api/goals", headers={"Authorization": f"Bearer {token_a}"}).json()
+            matched = next(g for g in check_goals if g["id"] == goal_a_id)
+            self.assertEqual(matched["currentValue"], 10000.0)
+            self.assertEqual(matched["progressPercent"], 8.33)
+            self.assertEqual(matched["amountRemaining"], 110000.0)
+
+            # -------------------------------------------------------------------
+            # H. Verify Mirrored Portfolio Asset is not Double-Counted
+            # -------------------------------------------------------------------
+            # Mirrored asset linked to holding and linked to goal
+            mirror_res = self.client.post(
+                "/api/net-worth/assets",
+                json={
+                    "name": "Mirrored Asset",
+                    "category": "stocks",
+                    "currentValue": 2000.0,
+                    "linkedHoldingId": holding_id,
+                    "goalId": goal_a_id,
+                    "currency": "USD"
+                },
+                headers={"Authorization": f"Bearer {token_a}"}
+            )
+            if mirror_res.status_code == 201:
+                created_asset_ids.append(mirror_res.json()["id"])
+            check_goals2 = self.client.get("/api/goals", headers={"Authorization": f"Bearer {token_a}"}).json()
+            matched2 = next(g for g in check_goals2 if g["id"] == goal_a_id)
+            # Must remain 10000.0, NOT 12000.0
+            self.assertEqual(matched2["currentValue"], 10000.0)
+
+            # -------------------------------------------------------------------
+            # J. Verify Cross-User Goal Isolation
+            # -------------------------------------------------------------------
+            # User B creates a goal
+            g_b_res = self.client.post(
+                "/api/goals",
+                json={
+                    "name": "User B Goal",
+                    "targetAmount": 50000.0,
+                    "targetDate": "2030-01-01"
+                },
+                headers={"Authorization": f"Bearer {token_b}"}
+            )
+            self.assertEqual(g_b_res.status_code, 201)
+            goal_b_id = g_b_res.json()["id"]
+            created_goal_ids.append(goal_b_id)
+
+            # User A cannot view User B's goal
+            user_a_list = self.client.get("/api/goals", headers={"Authorization": f"Bearer {token_a}"}).json()
+            self.assertFalse(any(g["id"] == goal_b_id for g in user_a_list))
+
+            # User A cannot update User B's goal
+            up_b_res = self.client.put(
+                f"/api/goals/{goal_b_id}",
+                json={"name": "Hacked Goal"},
+                headers={"Authorization": f"Bearer {token_a}"}
+            )
+            self.assertIn(up_b_res.status_code, [403, 404])
+
+            # User A cannot link a holding to User B's goal -> 403 Forbidden
+            cross_link_res = self.client.post(
+                "/api/investments/holdings",
+                json={
+                    "symbol": "CROSSSTK",
+                    "name": "Cross Holding",
+                    "assetType": "stock",
+                    "currentPrice": 100.0,
+                    "goalId": goal_b_id
+                },
+                headers={"Authorization": f"Bearer {token_a}"}
+            )
+            self.assertEqual(cross_link_res.status_code, 403)
+
+            # -------------------------------------------------------------------
+            # I. Delete Goal and Verify Unlinking in Supabase
+            # -------------------------------------------------------------------
+            del_res = self.client.delete(f"/api/goals/{goal_a_id}", headers={"Authorization": f"Bearer {token_a}"})
+            self.assertEqual(del_res.status_code, 200)
+
+            # Verify goal deleted in Supabase
+            sb_del = self.supabase.table("financial_goals").select("*").eq("id", goal_a_id).execute()
+            self.assertEqual(len(sb_del.data), 0)
+
+            # Verify holding still exists in Supabase, but goal_id is NULL
+            sb_h_after = self.supabase.table("investment_holdings").select("*").eq("id", holding_id).execute()
+            self.assertEqual(len(sb_h_after.data), 1)
+            self.assertIsNone(sb_h_after.data[0]["goal_id"])
+
+            # Verify asset still exists in Supabase, but goal_id is NULL
+            sb_a_after = self.supabase.table("user_assets").select("*").eq("id", asset_id).execute()
+            self.assertEqual(len(sb_a_after.data), 1)
+            self.assertIsNone(sb_a_after.data[0]["goal_id"])
+
+        finally:
+            # -------------------------------------------------------------------
+            # K. Cleanup ALL test data in try/finally
+            # -------------------------------------------------------------------
+            for hid in created_holding_ids:
+                try:
+                    self.supabase.table("investment_transactions").delete().eq("holding_id", hid).execute()
+                    self.supabase.table("investment_holdings").delete().eq("id", hid).execute()
+                except Exception:
+                    pass
+
+            for aid in created_asset_ids:
+                try:
+                    self.supabase.table("user_assets").delete().eq("id", aid).execute()
+                except Exception:
+                    pass
+
+            for gid in created_goal_ids:
+                try:
+                    self.supabase.table("financial_goals").delete().eq("id", gid).execute()
+                except Exception:
+                    pass
+
 
 if __name__ == "__main__":
     unittest.main()
+
