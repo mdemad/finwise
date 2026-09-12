@@ -20,6 +20,8 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (name: string, currency: string) => Promise<boolean>;
+  resetPassword: (email: string) => Promise<boolean>;
+  updatePassword: (newPassword: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -194,6 +196,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const resetPassword = async (email: string): Promise<boolean> => {
+    setError(null);
+    setLoading(true);
+    try {
+      const { error: sbError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (sbError) throw sbError;
+      setLoading(false);
+      return true;
+    } catch (err: any) {
+      setError(err.message || 'Failed to send password reset email');
+      setLoading(false);
+      return false;
+    }
+  };
+
+  const updatePassword = async (newPassword: string): Promise<boolean> => {
+    setError(null);
+    setLoading(true);
+    try {
+      const { error: sbError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (sbError) throw sbError;
+      setLoading(false);
+      return true;
+    } catch (err: any) {
+      setError(err.message || 'Failed to update password');
+      setLoading(false);
+      return false;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -206,6 +242,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithGoogle,
         logout,
         updateProfile,
+        resetPassword,
+        updatePassword,
       }}
     >
       {children}
