@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCurrency } from '../context/CurrencyContext';
 import {
@@ -16,6 +16,10 @@ const FETCH_TIMEOUT_MS = 25000;
 export function useInvestments() {
   const { user, session } = useAuth();
   const { currency } = useCurrency();
+  const userId = user?.id;
+
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -24,7 +28,7 @@ export function useInvestments() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setHoldings([]);
       setTransactions([]);
       setSummary(null);
@@ -40,7 +44,7 @@ export function useInvestments() {
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
     try {
-      const token = session?.access_token;
+      const token = sessionRef.current?.access_token;
       const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
       const [holdingsRes, txsRes, summaryRes] = await Promise.all([
@@ -79,7 +83,7 @@ export function useInvestments() {
       clearTimeout(timeoutId);
       setLoading(false);
     }
-  }, [user, session]);
+  }, [userId]);
 
   useEffect(() => {
     fetchData();
@@ -91,10 +95,10 @@ export function useInvestments() {
   const createHolding = async (
     payload: HoldingCreatePayload
   ): Promise<{ success: boolean; error?: string }> => {
-    if (!user) return { success: false, error: 'User not authenticated' };
+    if (!userId) return { success: false, error: 'User not authenticated' };
 
     try {
-      const token = session?.access_token;
+      const token = sessionRef.current?.access_token;
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -127,10 +131,10 @@ export function useInvestments() {
     id: string,
     payload: HoldingUpdatePayload
   ): Promise<{ success: boolean; error?: string }> => {
-    if (!user) return { success: false, error: 'User not authenticated' };
+    if (!userId) return { success: false, error: 'User not authenticated' };
 
     try {
-      const token = session?.access_token;
+      const token = sessionRef.current?.access_token;
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -159,10 +163,10 @@ export function useInvestments() {
   // Delete Holding
   // ---------------------------------------------------------------------------
   const deleteHolding = async (id: string): Promise<{ success: boolean; error?: string }> => {
-    if (!user) return { success: false, error: 'User not authenticated' };
+    if (!userId) return { success: false, error: 'User not authenticated' };
 
     try {
-      const token = session?.access_token;
+      const token = sessionRef.current?.access_token;
       const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
       const res = await fetch(`${API_URL}/api/investments/holdings/${id}`, {
@@ -189,10 +193,10 @@ export function useInvestments() {
   const recordTransaction = async (
     payload: TransactionCreatePayload
   ): Promise<{ success: boolean; error?: string }> => {
-    if (!user) return { success: false, error: 'User not authenticated' };
+    if (!userId) return { success: false, error: 'User not authenticated' };
 
     try {
-      const token = session?.access_token;
+      const token = sessionRef.current?.access_token;
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),

@@ -41,6 +41,29 @@ const mapSupabaseUser = (sbUser: SupabaseUser): User => {
   };
 };
 
+const isUserEqual = (a: User | null, b: User | null): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.id === b.id &&
+    a.email === b.email &&
+    a.name === b.name &&
+    a.currency === b.currency &&
+    a.createdAt === b.createdAt
+  );
+};
+
+const isSessionEqual = (a: Session | null, b: Session | null): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.access_token === b.access_token &&
+    a.refresh_token === b.refresh_token &&
+    a.expires_at === b.expires_at &&
+    a.user?.id === b.user?.id
+  );
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -56,12 +79,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           data: { session: initialSession },
         } = await supabase.auth.getSession();
         if (mounted) {
-          setSession(initialSession);
-          if (initialSession?.user) {
-            setUser(mapSupabaseUser(initialSession.user));
-          } else {
-            setUser(null);
-          }
+          const nextUser = initialSession?.user ? mapSupabaseUser(initialSession.user) : null;
+          setSession((prev) => (isSessionEqual(prev, initialSession) ? prev : initialSession));
+          setUser((prev) => (isUserEqual(prev, nextUser) ? prev : nextUser));
         }
       } catch (err) {
         console.error('Failed to restore Supabase auth session:', err);
@@ -78,12 +98,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       if (mounted) {
-        setSession(currentSession);
-        if (currentSession?.user) {
-          setUser(mapSupabaseUser(currentSession.user));
-        } else {
-          setUser(null);
-        }
+        const nextUser = currentSession?.user ? mapSupabaseUser(currentSession.user) : null;
+        setSession((prev) => (isSessionEqual(prev, currentSession) ? prev : currentSession));
+        setUser((prev) => (isUserEqual(prev, nextUser) ? prev : nextUser));
         setLoading(false);
       }
     });
@@ -104,8 +121,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       if (sbError) throw sbError;
       if (data.session) {
-        setSession(data.session);
-        setUser(mapSupabaseUser(data.user));
+        setSession((prev) => (isSessionEqual(prev, data.session) ? prev : data.session));
+        const nextUser = mapSupabaseUser(data.user);
+        setUser((prev) => (isUserEqual(prev, nextUser) ? prev : nextUser));
       }
       setLoading(false);
       return true;
@@ -130,8 +148,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (sbError) throw sbError;
       if (data.user) {
         if (data.session) {
-          setSession(data.session);
-          setUser(mapSupabaseUser(data.user));
+          setSession((prev) => (isSessionEqual(prev, data.session) ? prev : data.session));
+          const nextUser = mapSupabaseUser(data.user);
+          setUser((prev) => (isUserEqual(prev, nextUser) ? prev : nextUser));
         }
       }
       setLoading(false);
@@ -177,7 +196,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       if (sbError) throw sbError;
       if (data.user) {
-        setUser(mapSupabaseUser(data.user));
+        const nextUser = mapSupabaseUser(data.user);
+        setUser((prev) => (isUserEqual(prev, nextUser) ? prev : nextUser));
       }
       if (session?.access_token) {
         await fetch(`${API_URL}/api/auth/profile`, {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { Goal, GoalCreate, GoalUpdate, GoalsSummary } from '../types/goals';
@@ -9,6 +9,12 @@ const FETCH_TIMEOUT_MS = 25000;
 export function useGoals() {
   const { user, session } = useAuth();
   const { currency } = useCurrency();
+  const userId = user?.id;
+
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const currencyRef = useRef(currency);
+  currencyRef.current = currency;
   
   const [goals, setGoals] = useState<Goal[]>([]);
   const [summary, setSummary] = useState<GoalsSummary | null>(null);
@@ -16,7 +22,7 @@ export function useGoals() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchGoals = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setGoals([]);
       setSummary(null);
       setError(null);
@@ -31,7 +37,7 @@ export function useGoals() {
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
     try {
-      const token = session?.access_token;
+      const token = sessionRef.current?.access_token;
       const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
       const [goalsRes, summaryRes] = await Promise.all([
@@ -61,16 +67,16 @@ export function useGoals() {
       clearTimeout(timeoutId);
       setLoading(false);
     }
-  }, [user, session]);
+  }, [userId]);
 
   useEffect(() => {
     fetchGoals();
   }, [fetchGoals]);
 
   const addGoal = async (data: GoalCreate): Promise<Goal | null> => {
-    if (!user) return null;
+    if (!userId) return null;
     try {
-      const token = session?.access_token;
+      const token = sessionRef.current?.access_token;
       const headers = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -79,7 +85,7 @@ export function useGoals() {
       const res = await fetch(`${API_URL}/api/goals`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ ...data, currency: data.currency || currency })
+        body: JSON.stringify({ ...data, currency: data.currency || currencyRef.current })
       });
 
       if (res.ok) {
@@ -96,9 +102,9 @@ export function useGoals() {
   };
 
   const updateGoal = async (id: string, updates: GoalUpdate): Promise<boolean> => {
-    if (!user) return false;
+    if (!userId) return false;
     try {
-      const token = session?.access_token;
+      const token = sessionRef.current?.access_token;
       const headers = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -124,9 +130,9 @@ export function useGoals() {
   };
 
   const deleteGoal = async (id: string): Promise<boolean> => {
-    if (!user) return false;
+    if (!userId) return false;
     try {
-      const token = session?.access_token;
+      const token = sessionRef.current?.access_token;
       const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
       const res = await fetch(`${API_URL}/api/goals/${id}`, {
