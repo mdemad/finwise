@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, Any
+from typing import Optional, Any, List
 from datetime import datetime
 
 # Auth Schemas
@@ -330,3 +330,78 @@ class GoalResponse(GoalBase):
 
     class Config:
         from_attributes = True
+
+# ---------------------------------------------------------------------------
+# Halal Investor & Methodology Schemas (Phase 5A)
+# ---------------------------------------------------------------------------
+
+class SecurityBase(BaseModel):
+    ticker: str = Field(..., min_length=1, max_length=20, description="Asset ticker symbol (e.g. AAPL, RELIANCE)")
+    isin: Optional[str] = Field(None, max_length=12, description="International Securities Identification Number")
+    name: str = Field(..., min_length=1, max_length=200, description="Company or fund name")
+    assetType: str = Field(..., description="stock, etf, mutual_fund, bond, crypto, reit, sukuk, other")
+    exchange: str = Field(..., min_length=1, max_length=50, description="Primary exchange (e.g. NASDAQ, NYSE, NSE, LSE)")
+    country: str = Field(..., min_length=2, max_length=100, description="Country of primary listing/incorporation")
+    currency: str = Field(default="USD", min_length=3, max_length=3, description="Trading currency")
+    sector: Optional[str] = Field(None, max_length=100, description="Sector classification")
+    industry: Optional[str] = Field(None, max_length=150, description="Industry classification")
+    isActive: bool = Field(default=True, description="Whether active for screening")
+
+class SecurityCreate(SecurityBase):
+    pass
+
+class SecurityResponse(SecurityBase):
+    id: str
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+class ShariahRuleThresholdResponse(BaseModel):
+    id: str
+    methodologyVersionId: str
+    ruleType: str
+    metricName: str
+    operator: str
+    thresholdValue: float
+    denominatorType: Optional[str] = None
+    description: str
+    verifiedBy: str
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+class ShariahMethodologyVersionResponse(BaseModel):
+    id: str
+    methodologyId: str
+    versionCode: str
+    releaseDate: str
+    documentationUrl: Optional[str] = None
+    isCurrentDefault: bool = False
+    notes: Optional[str] = None
+    createdAt: datetime
+    updatedAt: datetime
+    rules: Optional[List[ShariahRuleThresholdResponse]] = None
+
+    class Config:
+        from_attributes = True
+
+class ShariahMethodologyResponse(BaseModel):
+    id: str
+    name: str
+    organization: str
+    description: str
+    isActive: bool = True
+    createdAt: datetime
+    updatedAt: datetime
+    versions: Optional[List[ShariahMethodologyVersionResponse]] = None
+
+    class Config:
+        from_attributes = True
+
+class ShariahMethodologyDetailResponse(ShariahMethodologyResponse):
+    pass
+
