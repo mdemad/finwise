@@ -8,8 +8,8 @@ from app.models.schemas import (
     InvestmentSummaryResponse,
     AssetAllocationItem,
 )
-from app.api.auth import get_current_user
-from app.api.currency import get_current_rates
+from app.api.auth import get_current_user, _get_supabase_client as _get_supabase
+from app.api.currency import get_current_rates_safe
 from app.config import settings
 from datetime import datetime, timezone
 import uuid
@@ -151,41 +151,41 @@ async def create_holding(
     # Supabase DB Sync if credentials provided
     if settings.SUPABASE_URL and settings.SUPABASE_KEY:
         try:
-            from supabase import create_client
-            supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-            supabase.table("investment_holdings").insert({
-                "id": holding_id,
-                "user_id": user_id,
-                "symbol": new_holding["symbol"],
-                "name": new_holding["name"],
-                "asset_type": new_holding["assetType"],
-                "currency": new_holding["currency"],
-                "broker_code": new_holding["brokerCode"],
-                "external_holding_id": new_holding["externalHoldingId"],
-                "units_held": new_holding["unitsHeld"],
-                "average_buy_price": new_holding["averageBuyPrice"],
-                "current_price": new_holding["currentPrice"],
-                "status": new_holding["status"],
-                "goal_id": new_holding.get("goalId"),
-                "notes": new_holding["notes"],
-                "created_at": now.isoformat(),
-                "updated_at": now.isoformat(),
-            }).execute()
-
-            if holding_in.initialQuantity and float(holding_in.initialQuantity) > 0:
-                supabase.table("investment_transactions").insert({
-                    "id": init_tx["id"],
+            supabase = _get_supabase()
+            if supabase:
+                supabase.table("investment_holdings").insert({
+                    "id": holding_id,
                     "user_id": user_id,
-                    "holding_id": holding_id,
-                    "transaction_type": "BUY",
-                    "quantity": init_tx["quantity"],
-                    "price": init_tx["price"],
-                    "amount": init_tx["amount"],
-                    "fees": 0.0,
-                    "currency": currency_code,
-                    "transaction_date": now.isoformat(),
+                    "symbol": new_holding["symbol"],
+                    "name": new_holding["name"],
+                    "asset_type": new_holding["assetType"],
+                    "currency": new_holding["currency"],
+                    "broker_code": new_holding["brokerCode"],
+                    "external_holding_id": new_holding["externalHoldingId"],
+                    "units_held": new_holding["unitsHeld"],
+                    "average_buy_price": new_holding["averageBuyPrice"],
+                    "current_price": new_holding["currentPrice"],
+                    "status": new_holding["status"],
+                    "goal_id": new_holding.get("goalId"),
+                    "notes": new_holding["notes"],
                     "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
                 }).execute()
+
+                if holding_in.initialQuantity and float(holding_in.initialQuantity) > 0:
+                    supabase.table("investment_transactions").insert({
+                        "id": init_tx["id"],
+                        "user_id": user_id,
+                        "holding_id": holding_id,
+                        "transaction_type": "BUY",
+                        "quantity": init_tx["quantity"],
+                        "price": init_tx["price"],
+                        "amount": init_tx["amount"],
+                        "fees": 0.0,
+                        "currency": currency_code,
+                        "transaction_date": now.isoformat(),
+                        "created_at": now.isoformat(),
+                    }).execute()
         except Exception as e:
             print(f"Supabase holding sync note: {e}")
 
@@ -247,20 +247,20 @@ async def update_holding(
 
     if settings.SUPABASE_URL and settings.SUPABASE_KEY:
         try:
-            from supabase import create_client
-            supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-            supabase.table("investment_holdings").update({
-                "symbol": holding["symbol"],
-                "name": holding["name"],
-                "asset_type": holding["assetType"],
-                "currency": holding["currency"],
-                "broker_code": holding["brokerCode"],
-                "current_price": holding["currentPrice"],
-                "status": holding["status"],
-                "goal_id": holding.get("goalId"),
-                "notes": holding.get("notes"),
-                "updated_at": now.isoformat(),
-            }).eq("id", holding_id).eq("user_id", user_id).execute()
+            supabase = _get_supabase()
+            if supabase:
+                supabase.table("investment_holdings").update({
+                    "symbol": holding["symbol"],
+                    "name": holding["name"],
+                    "asset_type": holding["assetType"],
+                    "currency": holding["currency"],
+                    "broker_code": holding["brokerCode"],
+                    "current_price": holding["currentPrice"],
+                    "status": holding["status"],
+                    "goal_id": holding.get("goalId"),
+                    "notes": holding.get("notes"),
+                    "updated_at": now.isoformat(),
+                }).eq("id", holding_id).eq("user_id", user_id).execute()
         except Exception as e:
             print(f"Supabase holding update note: {e}")
 
@@ -293,9 +293,9 @@ async def delete_holding(
 
     if settings.SUPABASE_URL and settings.SUPABASE_KEY:
         try:
-            from supabase import create_client
-            supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-            supabase.table("investment_holdings").delete().eq("id", holding_id).eq("user_id", user_id).execute()
+            supabase = _get_supabase()
+            if supabase:
+                supabase.table("investment_holdings").delete().eq("id", holding_id).eq("user_id", user_id).execute()
         except Exception as e:
             print(f"Supabase holding delete note: {e}")
 
@@ -493,21 +493,21 @@ async def create_transaction(
     # Supabase Atomic Sync via PL/pgSQL RPC if credentials configured
     if settings.SUPABASE_URL and settings.SUPABASE_KEY:
         try:
-            from supabase import create_client
-            supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-            supabase.rpc("process_investment_transaction", {
-                "p_user_id": user_id,
-                "p_holding_id": new_tx["holdingId"],
-                "p_transaction_type": t_type,
-                "p_quantity": new_tx["quantity"],
-                "p_price": new_tx["price"],
-                "p_amount": new_tx["amount"],
-                "p_fees": new_tx["fees"],
-                "p_currency": new_tx["currency"],
-                "p_transaction_date": new_tx["transactionDate"].isoformat(),
-                "p_external_transaction_id": new_tx["externalTransactionId"],
-                "p_notes": new_tx["notes"],
-            }).execute()
+            supabase = _get_supabase()
+            if supabase:
+                supabase.rpc("process_investment_transaction", {
+                    "p_user_id": user_id,
+                    "p_holding_id": new_tx["holdingId"],
+                    "p_transaction_type": t_type,
+                    "p_quantity": new_tx["quantity"],
+                    "p_price": new_tx["price"],
+                    "p_amount": new_tx["amount"],
+                    "p_fees": new_tx["fees"],
+                    "p_currency": new_tx["currency"],
+                    "p_transaction_date": new_tx["transactionDate"].isoformat(),
+                    "p_external_transaction_id": new_tx["externalTransactionId"],
+                    "p_notes": new_tx["notes"],
+                }).execute()
         except Exception as e:
             print(f"Supabase transaction RPC sync note: {e}")
 
@@ -544,7 +544,7 @@ async def get_investment_summary(current_user: dict = Depends(get_current_user))
         ]
 
     try:
-        rates_data = await get_current_rates(user_base_currency)
+        rates_data = await get_current_rates_safe(user_base_currency)
     except Exception:
         rates_data = {user_base_currency: 1.0}
 

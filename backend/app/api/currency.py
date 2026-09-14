@@ -291,6 +291,51 @@ async def get_current_rates(base: str) -> dict[str, float]:
     return rates
 
 
+async def get_current_rates_safe(base: str, timeout_s: float = 5.0) -> dict[str, float]:
+    """
+    Non-blocking variant of get_current_rates() for use inside time-sensitive
+    endpoints (e.g. /api/investments/summary).
+
+    - Always returns immediately from the cache when available (same cache as
+      get_current_rates, so a prior call pre-warms it).
+    - On a cache miss, attempts to fetch live rates but caps the TOTAL wait at
+      ``timeout_s`` seconds across both providers combined.
+    - If the fetch fails or times out, returns a minimal neutral rate map
+      {base: 1.0} instead of raising an exception, so the caller can still
+      compute approximate values rather than returning a 503.
+    """
+    cache_k = _cache_key("rates", base)
+    cached = _rates_cache.get(cache_k)
+    if _is_cache_valid(cached, _CACHE_TTL_LATEST):
+        return cached["rates"]
+
+    try:
+        rates = await asyncio.wait_for(get_current_rates(base), timeout=timeout_s)
+        return rates
+    except asyncio.TimeoutError:
+        logger.warning(
+            "get_current_rates_safe: FX fetch timed out after %.1fs for base %s; "
+            "using 1:1 neutral fallback",
+            timeout_s, base,
+        )
+    except HTTPException:
+        logger.warning(
+            "get_current_rates_safe: FX providers unavailable for base %s; "
+            "using 1:1 neutral fallback",
+            base,
+        )
+    except Exception as exc:
+        logger.warning(
+            "get_current_rates_safe: unexpected FX error for base %s (%s); "
+            "using 1:1 neutral fallback",
+            base, exc,
+        )
+
+    # Safe fallback: treat all currencies as 1:1 with base
+    # (means cross-currency P&L will be approximate, not missing)
+    return {base.upper(): 1.0}
+
+
 async def get_historical_rates(base: str, target: str, period: str) -> list[dict]:
     """Returns historical points with caching."""
     cache_k = _cache_key(f"hist:{target}:{period}", base)

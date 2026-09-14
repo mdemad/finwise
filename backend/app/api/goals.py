@@ -15,7 +15,7 @@ The frontend-supplied user_id is never trusted.
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
 from app.models.schemas import GoalCreate, GoalUpdate, GoalResponse
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, _get_supabase_client as _get_supabase_singleton
 from app.config import settings
 from datetime import datetime, timezone, date
 import uuid
@@ -35,8 +35,11 @@ def _supabase_configured() -> bool:
 
 
 def _get_supabase():
-    from supabase import create_client
-    return create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+    """Returns the singleton Supabase client shared across all modules."""
+    client = _get_supabase_singleton()
+    if client is None:
+        raise RuntimeError("Supabase client not available")
+    return client
 
 
 def _row_to_dict(row: dict) -> dict:
