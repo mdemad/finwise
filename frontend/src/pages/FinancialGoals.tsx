@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useGoals } from '../hooks/useGoals';
 import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
@@ -98,7 +99,8 @@ export const FinancialGoals: React.FC = () => {
 
   const filteredGoals = filterStatus === 'all' ? goals : goals.filter(g => g.status === filterStatus);
 
-  if (loading && !error && goals.length === 0) {
+  // Only show full-page spinner when a logged-in user is actively loading data
+  if (loading && user && !error && goals.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[500px]">
         <div className="flex flex-col items-center gap-3">
@@ -111,6 +113,24 @@ export const FinancialGoals: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-12">
+      {/* Guest Login Banner */}
+      {!user && (
+        <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Target className="w-5 h-5 text-purple-500 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-purple-700 dark:text-purple-300">Log in to track your financial goals</p>
+              <p className="text-xs text-purple-500 dark:text-purple-400">Sign in to create goals, link investments, and monitor your progress.</p>
+            </div>
+          </div>
+          <Link
+            to="/login"
+            className="shrink-0 px-4 py-2 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-xs font-bold transition-colors"
+          >
+            Log In
+          </Link>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2.5">

@@ -7,7 +7,7 @@ const API_URL = import.meta.env.VITE_API_URL || '';
 const FETCH_TIMEOUT_MS = 25000;
 
 export function useGoals() {
-  const { user, session } = useAuth();
+  const { user, session, loading: authLoading } = useAuth();
   const { currency } = useCurrency();
   const userId = user?.id;
 
@@ -18,7 +18,8 @@ export function useGoals() {
   
   const [goals, setGoals] = useState<Goal[]>([]);
   const [summary, setSummary] = useState<GoalsSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Start false — we only show loading when actively fetching for a logged-in user
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchGoals = useCallback(async () => {
@@ -70,8 +71,10 @@ export function useGoals() {
   }, [userId]);
 
   useEffect(() => {
+    // While auth is still resolving, don't fetch (avoids unauthenticated API calls)
+    if (authLoading) return;
     fetchGoals();
-  }, [fetchGoals]);
+  }, [fetchGoals, authLoading]);
 
   const addGoal = async (data: GoalCreate): Promise<Goal | null> => {
     if (!userId) return null;

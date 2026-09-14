@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useInvestments } from '../hooks/useInvestments';
 import { useGoals } from '../hooks/useGoals';
 import { useCurrency } from '../context/CurrencyContext';
@@ -501,7 +502,8 @@ export const Portfolio: React.FC = () => {
   // ---------------------------------------------------------------------------
   // Render Loading & Error Banners
   // ---------------------------------------------------------------------------
-  if (loading && !error && holdings.length === 0) {
+  // Only block with a spinner when a logged-in user's data is actively loading
+  if (loading && user && !error && holdings.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[500px] w-full">
         <div className="flex flex-col items-center gap-3">
@@ -514,6 +516,24 @@ export const Portfolio: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-12">
+      {/* Guest Login Banner */}
+      {!user && (
+        <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Briefcase className="w-5 h-5 text-blue-500 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-blue-700 dark:text-blue-300">Log in to track your investments</p>
+              <p className="text-xs text-blue-500 dark:text-blue-400">Sign in to add holdings, record trades, and see your real portfolio data.</p>
+            </div>
+          </div>
+          <Link
+            to="/login"
+            className="shrink-0 px-4 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold transition-colors"
+          >
+            Log In
+          </Link>
+        </div>
+      )}
       {/* Top Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

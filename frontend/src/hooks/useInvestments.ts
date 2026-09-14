@@ -14,7 +14,7 @@ const API_URL = import.meta.env.VITE_API_URL || '';
 const FETCH_TIMEOUT_MS = 25000;
 
 export function useInvestments() {
-  const { user, session } = useAuth();
+  const { user, session, loading: authLoading } = useAuth();
   const { currency } = useCurrency();
   const userId = user?.id;
 
@@ -24,7 +24,8 @@ export function useInvestments() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [summary, setSummary] = useState<InvestmentSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Start false — we only show loading when actively fetching for a logged-in user
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -86,8 +87,10 @@ export function useInvestments() {
   }, [userId]);
 
   useEffect(() => {
+    // While auth is still resolving, don't fetch (avoids unauthenticated API calls)
+    if (authLoading) return;
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, authLoading]);
 
   // ---------------------------------------------------------------------------
   // Create Holding

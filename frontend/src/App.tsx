@@ -69,9 +69,11 @@ function App() {
                   <Route path="/forgot-password" element={<ForgotPassword />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
 
-                  {/* Protected Portfolio & Profile */}
-                  <Route path="/portfolio" element={<AuthGuard><Portfolio /></AuthGuard>} />
-                  <Route path="/goals" element={<AuthGuard><FinancialGoals /></AuthGuard>} />
+                  {/* Portfolio & Goals: public (guest sees zeros, logged-in sees data) */}
+                  <Route path="/portfolio" element={<Portfolio />} />
+                  <Route path="/goals" element={<FinancialGoals />} />
+
+                  {/* Profile: requires login */}
                   <Route path="/profile" element={<AuthGuard><Profile /></AuthGuard>} />
 
                   {/* Fallback */}
