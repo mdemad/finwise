@@ -10,15 +10,18 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from app.main import app
 from app.config import settings
-from app.api.auth import MOCK_USERS
+from app.api.auth import MOCK_USERS, _SYNCED_USERS
 from app.api.net_worth import MOCK_ASSETS, MOCK_LIABILITIES
 from app.api.calculations import MOCK_CALCS
+import threading
+from unittest.mock import patch, MagicMock
 
 class TestSupabaseAuthMigration(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         # Clear mock stores before each test
         MOCK_USERS.clear()
+        _SYNCED_USERS.clear()
         MOCK_ASSETS.clear()
         MOCK_LIABILITIES.clear()
         MOCK_CALCS.clear()
@@ -27,6 +30,8 @@ class TestSupabaseAuthMigration(unittest.TestCase):
         self.secret = "test_jwt_secret_key_12345678901234567890_32bytes"
         settings.JWT_SECRET = self.secret
         settings.SUPABASE_JWT_SECRET = self.secret
+        settings.SUPABASE_URL = ""
+        settings.SUPABASE_KEY = ""
 
     def create_mock_jwt(self, user_id: str, email: str, name: str = "Test User", expired: bool = False):
         exp = datetime.now(timezone.utc) + (timedelta(seconds=-10) if expired else timedelta(hours=1))
@@ -154,6 +159,143 @@ class TestSupabaseAuthMigration(unittest.TestCase):
         # Verify legacy user ID was not overwritten
         self.assertIn(custom_user_id, MOCK_USERS)
         self.assertIn(sb_uuid, MOCK_USERS)
+
+    def test_concurrent_authenticated_requests_safe(self):
+        """Multiple parallel requests for the same user succeed without race conditions."""
+        user_uuid = "concurrent-user-uuid-8888"
+        token = self.create_mock_jwt(user_uuid, "concurrent@example.com", "Concurrent User")
+
+        results = []
+        threads = []
+
+        def make_request():
+            res = self.client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+            results.append(res.status_code)
+
+        for _ in range(10):
+            t = threading.Thread(target=make_request)
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
+
+        self.assertEqual(len(results), 10)
+        self.assertTrue(all(code == 200 for code in results))
+        self.assertIn(user_uuid, MOCK_USERS)
+
+    def test_profile_update_persists_and_updates_mock_user(self):
+        """PUT /api/auth/profile updates user attributes cleanly."""
+        user_uuid = "profile-user-uuid-7777"
+        token = self.create_mock_jwt(user_uuid, "profile@example.com", "Old Name")
+
+        # Initial auth call
+        init_res = self.client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(init_res.status_code, 200)
+        self.assertEqual(init_res.json()["name"], "Old Name")
+
+        # Profile update call
+        update_res = self.client.put(
+            "/api/auth/profile",
+            json={"name": "New Name", "currency": "EUR"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(update_res.status_code, 200)
+        self.assertEqual(update_res.json()["name"], "New Name")
+        self.assertEqual(update_res.json()["currency"], "EUR")
+
+        self.assertEqual(MOCK_USERS[user_uuid]["name"], "New Name")
+        self.assertEqual(MOCK_USERS[user_uuid]["currency"], "EUR")
+
+    def test_synced_users_cache_and_concurrency_deduplication(self):
+        """5 concurrent requests for the same new user perform users.upsert() exactly ONCE, and subsequent requests skip it."""
+        settings.SUPABASE_URL = "https://mock-supabase-project.supabase.co"
+        settings.SUPABASE_KEY = "mock-service-role-key"
+
+        user_uuid = "sync-test-uuid-5555"
+        token = self.create_mock_jwt(user_uuid, "sync_test@example.com", "Sync Test User")
+
+        with patch("app.api.auth._get_supabase_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_table = MagicMock()
+            mock_upsert = MagicMock()
+            mock_execute = MagicMock()
+
+            mock_get_client.return_value = mock_client
+            mock_client.table.return_value = mock_table
+            mock_table.upsert.return_value = mock_upsert
+            mock_upsert.execute.return_value = MagicMock(data=[{"id": user_uuid}])
+
+            # 1. Simulate 5 concurrent authenticated requests for the same user
+            results = []
+            threads = []
+
+            def make_request():
+                res = self.client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+                results.append(res.status_code)
+
+            for _ in range(5):
+                t = threading.Thread(target=make_request)
+                threads.append(t)
+                t.start()
+
+            for t in threads:
+                t.join()
+
+            self.assertEqual(len(results), 5)
+            self.assertTrue(all(code == 200 for code in results))
+
+            # 2. Verify client.table("users").upsert(...) and execute() were called exactly ONCE across all 5 requests
+            mock_client.table.assert_called_with("users")
+            self.assertEqual(mock_table.upsert.call_count, 1)
+            self.assertEqual(mock_upsert.execute.call_count, 1)
+            self.assertIn(user_uuid, _SYNCED_USERS)
+
+            # 3. Subsequent request for the same user must NOT trigger another upsert
+            subsequent_res = self.client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+            self.assertEqual(subsequent_res.status_code, 200)
+            self.assertEqual(mock_table.upsert.call_count, 1)
+            self.assertEqual(mock_upsert.execute.call_count, 1)
+
+    def test_failed_upsert_does_not_poison_cache_and_allows_retry(self):
+        """If users.upsert() fails, user is NOT added to _SYNCED_USERS and subsequent request retries provisioning."""
+        settings.SUPABASE_URL = "https://mock-supabase-project.supabase.co"
+        settings.SUPABASE_KEY = "mock-service-role-key"
+
+        user_uuid = "fail-retry-uuid-6666"
+        token = self.create_mock_jwt(user_uuid, "fail_retry@example.com", "Retry User")
+
+        with patch("app.api.auth._get_supabase_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_table = MagicMock()
+            mock_upsert = MagicMock()
+
+            mock_get_client.return_value = mock_client
+            mock_client.table.return_value = mock_table
+            mock_table.upsert.return_value = mock_upsert
+            # First attempt raises network/database exception
+            mock_upsert.execute.side_effect = Exception("Supabase connection timed out")
+
+            # 1. First request fails database upsert
+            res1 = self.client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+            self.assertEqual(res1.status_code, 200)  # Graceful fallback returns mock user
+            self.assertEqual(mock_upsert.execute.call_count, 1)
+            self.assertNotIn(user_uuid, _SYNCED_USERS)  # Cache must NOT be poisoned
+
+            # 2. Supabase connection recovers
+            mock_upsert.execute.side_effect = None
+            mock_upsert.execute.return_value = MagicMock(data=[{"id": user_uuid}])
+
+            # 3. Second request retries provisioning
+            res2 = self.client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+            self.assertEqual(res2.status_code, 200)
+            self.assertEqual(mock_upsert.execute.call_count, 2)  # Retried
+            self.assertIn(user_uuid, _SYNCED_USERS)  # Successfully added to cache
+
+            # 4. Third request skips upsert
+            res3 = self.client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+            self.assertEqual(res3.status_code, 200)
+            self.assertEqual(mock_upsert.execute.call_count, 2)  # Skipped, call count stays at 2
 
 if __name__ == "__main__":
     unittest.main()

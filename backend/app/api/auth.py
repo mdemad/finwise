@@ -6,6 +6,7 @@ from app.config import settings
 from app.models.schemas import UserResponse, UserUpdate
 import os
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +15,27 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # Thread-safe in-memory user table
 MOCK_USERS = {}
 
+# In-process set of user IDs synchronized with the Supabase application `users` table
+_SYNCED_USERS: set[str] = set()
+_USER_SYNC_LOCK = threading.Lock()
+
+# Global singleton Supabase client
+_supabase_client = None
+_client_lock = threading.Lock()
+
+
 # Global JWK client cache per JWKS URL
 _jwks_clients = {}
+
+
+def _get_supabase_client():
+    global _supabase_client
+    if _supabase_client is None and settings.SUPABASE_URL and settings.SUPABASE_KEY:
+        with _client_lock:
+            if _supabase_client is None:
+                from supabase import create_client
+                _supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+    return _supabase_client
 
 
 def get_jwks_client(supabase_url: str) -> PyJWKClient:
@@ -121,6 +141,7 @@ def get_current_user(
     """
     FastAPI dependency ensuring request has a valid Supabase Auth JWT token.
     Extracts the authenticated Supabase user UUID from `sub`.
+    Synchronizes user to public.users at most once per backend process.
     """
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -149,33 +170,38 @@ def get_current_user(
     currency = user_metadata.get("currency", "USD")
 
     # Maintain user in memory keyed by Supabase Auth UUID (no email auto-merging)
-    if user_id not in MOCK_USERS:
-        MOCK_USERS[user_id] = {
-            "id": user_id,
-            "email": email,
-            "name": name,
-            "currency": currency,
-            "createdAt": datetime.now(timezone.utc),
-        }
-    else:
-        if name and name != "User":
-            MOCK_USERS[user_id]["name"] = name
-        if email:
-            MOCK_USERS[user_id]["email"] = email
-
-    # Safely insert/update user in Supabase application `users` table
-    if settings.SUPABASE_URL and settings.SUPABASE_KEY:
-        try:
-            from supabase import create_client
-            supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-            supabase.table("users").upsert({
+    with _USER_SYNC_LOCK:
+        if user_id not in MOCK_USERS:
+            MOCK_USERS[user_id] = {
                 "id": user_id,
                 "email": email,
                 "name": name,
                 "currency": currency,
-            }).execute()
-        except Exception as err:
-            logger.warning("Supabase application users table upsert note: %s", type(err).__name__)
+                "createdAt": datetime.now(timezone.utc),
+            }
+        else:
+            if name and name != "User":
+                MOCK_USERS[user_id]["name"] = name
+            if email:
+                MOCK_USERS[user_id]["email"] = email
+
+    # Safely insert/update user in Supabase application `users` table exactly once per process
+    if settings.SUPABASE_URL and settings.SUPABASE_KEY:
+        if user_id not in _SYNCED_USERS:
+            with _USER_SYNC_LOCK:
+                if user_id not in _SYNCED_USERS:
+                    try:
+                        client = _get_supabase_client()
+                        if client:
+                            client.table("users").upsert({
+                                "id": user_id,
+                                "email": email,
+                                "name": name,
+                                "currency": currency,
+                            }).execute()
+                            _SYNCED_USERS.add(user_id)
+                    except Exception as err:
+                        logger.warning("Supabase application users table upsert note: %s", type(err).__name__)
 
     return MOCK_USERS[user_id]
 
@@ -198,18 +224,21 @@ async def update_profile(
 ):
     user_id = current_user["id"]
 
-    if user_id in MOCK_USERS:
-        MOCK_USERS[user_id]["name"] = profile_in.name
-        MOCK_USERS[user_id]["currency"] = profile_in.currency
+    with _USER_SYNC_LOCK:
+        if user_id in MOCK_USERS:
+            MOCK_USERS[user_id]["name"] = profile_in.name
+            MOCK_USERS[user_id]["currency"] = profile_in.currency
 
     if settings.SUPABASE_URL and settings.SUPABASE_KEY:
         try:
-            from supabase import create_client
-            supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-            supabase.table("users").update({
-                "name": profile_in.name,
-                "currency": profile_in.currency,
-            }).eq("id", user_id).execute()
+            client = _get_supabase_client()
+            if client:
+                client.table("users").update({
+                    "name": profile_in.name,
+                    "currency": profile_in.currency,
+                }).eq("id", user_id).execute()
+                with _USER_SYNC_LOCK:
+                    _SYNCED_USERS.add(user_id)
         except Exception as err:
             logger.warning("Supabase profile update note: %s", type(err).__name__)
 
